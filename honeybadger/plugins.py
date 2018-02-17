@@ -1,0 +1,83 @@
+from abc import ABCMeta, abstractmethod
+from collections import OrderedDict
+from logging import getLogger
+
+from six import add_metaclass, iteritems
+
+logger = getLogger(__name__)
+
+
+@add_metaclass(ABCMeta)
+class Plugin(object):
+    """
+    Base class for plugins. A plugin is used to add functionality related to frameworks.
+    """
+    def __init__(self, name):
+        """
+        Initialize plugin.
+        :param name: the name of the plugin.
+        """
+        self.name = name
+
+    def supports(self, config, request, context):
+        """
+        Whether this plugin supports generating payload for the current configuration, request and context.
+        :param exception: current exception.
+        :param config: honeybadger configuration.
+        :param request: request object (if any).
+        :param context: current honeybadger context.
+        :return: True if plugin can generate payload for current exception, False else.
+        """
+        return False
+
+    @abstractmethod
+    def generate_payload(self, config, request, context):
+        """
+        Return additional payload for given exception. May be used by actual plugin implementations to gather additional
+        information.
+        :param config: honeybadger configuration
+        :param request: request object.
+        :param context: context gathered so far to send to honeybadger.
+        :return: a dictionary with the generated payload.
+        """
+        pass
+
+
+class PluginManager(object):
+    """
+    Manages lifecycle of plugins.
+    """
+    def __init__(self):
+        self._registered = OrderedDict()
+
+    def register(self, plugin):
+        """
+        Register the given plugin. Registration order is kept.
+        :param plugin: the plugin to register.
+        """
+        if plugin.name not in self._registered:
+            logger.info('Registering plugin %s' % plugin.name)
+            self._registered[plugin.name] = plugin
+        else:
+            logger.warn('Plugin %s already registered' % plugin.name)
+
+    def generate_payload(self, config=None, request=None, context=None):
+        """
+        Generate payload by iterating over registered plugins. Merges .
+        :param context: current context.
+        :param request: the request object.
+        :param config: honeybadger configuration.
+        :return: a dict with the generated payload.
+        """
+        for name, plugin in iteritems(self._registered):
+            if plugin.supports(config, request, context):
+                logger.debug('Returning payload from plugin %s' % name)
+                return plugin.generate_payload(config, request, context)
+
+        logger.debug('No active plugin to generate payload')
+        return {
+            'context': context
+        }
+
+# Global plugin manager
+default_plugin_manager = PluginManager()

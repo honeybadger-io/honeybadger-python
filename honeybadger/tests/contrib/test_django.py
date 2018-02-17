@@ -1,0 +1,66 @@
+import unittest
+from django.conf import settings
+from django.conf.urls import url
+from django.http import JsonResponse
+from django.test import RequestFactory
+from mock import Mock
+
+from honeybadger.config import Configuration
+from honeybadger.contrib.django import DjangoPlugin
+
+settings.configure(
+    ALLOWED_HOSTS=['testserver']
+)
+
+
+def view(request):
+    # Test view
+    return JsonResponse({})
+
+
+class DjangoPluginTestCase(unittest.TestCase):
+    def setUp(self):
+        self.plugin = DjangoPlugin()
+        self.rf = RequestFactory()
+        self.config = Configuration()
+        self.url = url(r'test', view, name='test_view')
+
+    def test_supports_django_request(self):
+        request = self.rf.get('test')
+        self.assertTrue(self.plugin.supports(self.config, request, {}))
+
+    def test_supports_non_django_request(self):
+        self.assertFalse(self.plugin.supports(self.config, Mock(), {}))
+
+    def test_generate_payload_get(self):
+        request = self.rf.get('test', {'a': 1, 'b': 2})
+        request.resolver_match = self.url.resolve('test')
+        payload = self.plugin.generate_payload(self.config, request, {'foo': 'bar'})
+        self.assertEqual(payload['url'], 'http://testserver/test?a=1&b=2')
+        self.assertEqual(payload['component'], '')
+        self.assertEqual(payload['action'], 'view')
+        self.assertDictEqual(payload['params'], {'a': ['1'], 'b': ['2']})
+        self.assertDictEqual(payload['session'], {})
+        self.assertDictEqual(payload['context'], {'foo': 'bar'})
+
+    def test_generate_payload_post(self):
+        request = self.rf.post('test', data={'a': 1, 'b': 2, 'password': 'notsafe'})
+        request.resolver_match = self.url.resolve('test')
+        payload = self.plugin.generate_payload(self.config, request, {'foo': 'bar'})
+        self.assertEqual(payload['url'], 'http://testserver/test')
+        self.assertEqual(payload['component'], '')
+        self.assertEqual(payload['action'], 'view')
+        self.assertDictEqual(payload['params'], {'a': ['1'], 'b': ['2'], 'password': '[FILTERED]'})
+        self.assertDictEqual(payload['session'], {})
+        self.assertDictEqual(payload['context'], {'foo': 'bar'})
+
+    def test_generate_payload_with_session(self):
+        request = self.rf.get('test')
+        request.resolver_match = self.url.resolve('test')
+        request.session = {'lang': 'en'}
+        payload = self.plugin.generate_payload(self.config, request, {'foo': 'bar'})
+        self.assertEqual(payload['url'], 'http://testserver/test')
+        self.assertEqual(payload['component'], '')
+        self.assertEqual(payload['action'], 'view')
+        self.assertDictEqual(payload['session'], {'lang': 'en'})
+        self.assertDictEqual(payload['context'], {'foo': 'bar'})

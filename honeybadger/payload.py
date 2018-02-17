@@ -1,7 +1,6 @@
 import sys
 import traceback
 import os
-import re
 import logging
 from six.moves import range
 from six.moves import zip
@@ -11,9 +10,10 @@ from datetime import datetime
 import psutil
 
 from .version import __version__
-from .utils import filter_dict
+from .plugins import default_plugin_manager
 
 logger = logging.getLogger('honeybadger.payload')
+
 
 def error_payload(exception, exc_traceback, config):
     def _filename(name):
@@ -53,6 +53,7 @@ def error_payload(exception, exc_traceback, config):
 
     return payload
 
+
 def server_payload(config):
     payload = {
         'project_root': config.project_root,
@@ -84,48 +85,12 @@ def server_payload(config):
 
     return payload
 
-def django_request_payload(request, context, config):
-    payload = {
-        'url': request.build_absolute_uri(),
-        'component': request.resolver_match.app_name,
-        'action': request.resolver_match.func.__name__,
-        'params': {},
-        'session': {},
-        'cgi_data': dict(request.META),
-        'context': context
-    }
-
-
-    if hasattr(request, 'session'):
-        payload['session'] = filter_dict(dict(request.session), config.params_filters)
-
-    if request.method == 'POST':
-        payload['params'] = filter_dict(dict(request.POST), config.params_filters)
-    else:
-        payload['params'] = filter_dict(dict(request.GET), config.params_filters)
-
-
-    return payload
-
-def flask_request_payload(request, context, config):
-    return {
-        'context': context
-    }
-
-def generic_request_payload(request, context, config):
-    return {
-        'context': context
-    }
 
 def create_payload(exception, exc_traceback=None, config=None, request=None, context={}):
     if exc_traceback is None:
         exc_traceback = sys.exc_info()[2]
 
-    if request is not None and re.match(r'^django\.', request.__module__):
-        request_payload = django_request_payload
-    else:
-        # TODO: figure out Flask support
-        request_payload = generic_request_payload
+    payload = default_plugin_manager.generate_payload(config, request, context)
 
     return {
         'notifier': {
@@ -135,5 +100,5 @@ def create_payload(exception, exc_traceback=None, config=None, request=None, con
         },
         'error':  error_payload(exception, exc_traceback, config),
         'server': server_payload(config),
-        'request': request_payload(request, context, config),
+        'request': payload,
     }

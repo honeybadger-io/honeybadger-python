@@ -1,6 +1,8 @@
 from honeybadger import honeybadger
 from six import iteritems
 
+from honeybadger.plugins import default_plugin_manager
+from honeybadger.contrib.django import DjangoPlugin
 try:
     # Support for Django 1.10...
     from django.utils.deprecation import MiddlewareMixin
@@ -19,6 +21,7 @@ class DjangoHoneybadgerMiddleware(MiddlewareMixin):
         config_kwargs = dict([(k.lower(), v) for (k, v) in iteritems(getattr(settings, 'HONEYBADGER', {}))])
         honeybadger.configure(**config_kwargs)
         honeybadger.config.set_12factor_config() # environment should override Django settings
+        default_plugin_manager.register(DjangoPlugin())
 
     def process_request(self, request):
         honeybadger.begin_request(request)
