@@ -37,7 +37,6 @@ class DjangoPluginTestCase(unittest.TestCase):
         request.resolver_match = self.url.resolve('test')
         payload = self.plugin.generate_payload(self.config, request, {'foo': 'bar'})
         self.assertEqual(payload['url'], 'http://testserver/test?a=1')
-        self.assertEqual(payload['component'], '')
         self.assertEqual(payload['action'], 'view')
         self.assertDictEqual(payload['params'], {'a': ['1']})
         self.assertDictEqual(payload['session'], {})
@@ -48,7 +47,6 @@ class DjangoPluginTestCase(unittest.TestCase):
         request.resolver_match = self.url.resolve('test')
         payload = self.plugin.generate_payload(self.config, request, {'foo': 'bar'})
         self.assertEqual(payload['url'], 'http://testserver/test')
-        self.assertEqual(payload['component'], '')
         self.assertEqual(payload['action'], 'view')
         self.assertDictEqual(payload['params'], {'a': ['1'], 'b': ['2'], 'password': '[FILTERED]'})
         self.assertDictEqual(payload['session'], {})
@@ -60,7 +58,6 @@ class DjangoPluginTestCase(unittest.TestCase):
         request.session = {'lang': 'en'}
         payload = self.plugin.generate_payload(self.config, request, {'foo': 'bar'})
         self.assertEqual(payload['url'], 'http://testserver/test')
-        self.assertEqual(payload['component'], '')
         self.assertEqual(payload['action'], 'view')
         self.assertDictEqual(payload['session'], {'lang': 'en'})
         self.assertDictEqual(payload['context'], {'foo': 'bar'})

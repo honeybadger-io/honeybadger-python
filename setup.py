@@ -6,13 +6,20 @@ from setuptools import setup
 
 # Django 2 requires at least python 3.4
 PY3_4 = sys.version_info >= (3, 4)
+PY3_2 = sys.version_info[0:2] == (3, 2)
 
 tests_require = ['nose', 'mock', 'testfixtures']
 if PY3_4:
     tests_require.append('django')
+elif PY3_2:
+    tests_require.append('django==1.8')
 else:
     tests_require.append('django<2')
 
+# Ugly fix for testfixtures on Python 3.2
+if PY3_2:
+    tests_require.remove('testfixtures')
+    tests_require.append('testfixtures==5.3.1')
 
 def get_version():
     with open('honeybadger/version.py', encoding='utf-8') as f:
