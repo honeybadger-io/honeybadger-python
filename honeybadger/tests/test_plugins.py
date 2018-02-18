@@ -17,8 +17,8 @@ class PluginManagerTestCase(unittest.TestCase):
         self.manager.register(self.plugin2)
         self.manager.register(self.plugin1)
 
-        self.assertListEqual(self.manager._registered.keys(), ['plugin1', 'plugin2'])
-        self.assertListEqual(self.manager._registered.values(), [self.plugin1, self.plugin2])
+        self.assertListEqual(list(self.manager._registered.keys()), ['plugin1', 'plugin2'])
+        self.assertListEqual(list(self.manager._registered.values()), [self.plugin1, self.plugin2])
 
     def test_generate_payload_first_plugin(self):
         self.manager.register(self.plugin1)

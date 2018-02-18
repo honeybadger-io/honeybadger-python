@@ -33,13 +33,13 @@ class DjangoPluginTestCase(unittest.TestCase):
         self.assertFalse(self.plugin.supports(self.config, Mock(), {}))
 
     def test_generate_payload_get(self):
-        request = self.rf.get('test', {'a': 1, 'b': 2})
+        request = self.rf.get('test', {'a': 1})
         request.resolver_match = self.url.resolve('test')
         payload = self.plugin.generate_payload(self.config, request, {'foo': 'bar'})
-        self.assertEqual(payload['url'], 'http://testserver/test?a=1&b=2')
+        self.assertEqual(payload['url'], 'http://testserver/test?a=1')
         self.assertEqual(payload['component'], '')
         self.assertEqual(payload['action'], 'view')
-        self.assertDictEqual(payload['params'], {'a': ['1'], 'b': ['2']})
+        self.assertDictEqual(payload['params'], {'a': ['1']})
         self.assertDictEqual(payload['session'], {})
         self.assertDictEqual(payload['context'], {'foo': 'bar'})
 

@@ -1,7 +1,18 @@
-from codecs import open
-
-from setuptools import setup
 import re
+import sys
+
+from codecs import open
+from setuptools import setup
+
+PY3 = sys.version_info[0] == 3
+
+tests_require = ['nose', 'mock', 'testfixtures']
+if PY3:
+    tests_require.append('django')
+else:
+    tests_require.append('django<2')
+
+
 def get_version():
     with open('honeybadger/version.py', encoding='utf-8') as f:
         return re.search(r'^__version__ = [\'"]([^\'"]+)[\'"]', f.read(), re.M).group(1)
@@ -27,5 +38,5 @@ setup(
         'six'
     ],
     test_suite='nose.collector',
-    tests_require=['nose', 'mock', 'testfixtures', 'django']
+    tests_require=tests_require
 )
