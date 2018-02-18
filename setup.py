@@ -4,10 +4,11 @@ import sys
 from codecs import open
 from setuptools import setup
 
-PY3 = sys.version_info[0] == 3
+# Django 2 requires at least python 3.4
+PY3_4 = sys.version_info >= (3, 4)
 
 tests_require = ['nose', 'mock', 'testfixtures']
-if PY3:
+if PY3_4:
     tests_require.append('django')
 else:
     tests_require.append('django<2')
