@@ -33,7 +33,7 @@ setup(
     author='Dave Sullivan',
     author_email='dave@davesullivan.ca',
     license='MIT',
-    packages=['honeybadger'],
+    packages=['honeybadger', 'honeybadger.contrib'],
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',

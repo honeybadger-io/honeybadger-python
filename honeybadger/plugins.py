@@ -19,24 +19,22 @@ class Plugin(object):
         """
         self.name = name
 
-    def supports(self, config, request, context):
+    def supports(self, config, context):
         """
         Whether this plugin supports generating payload for the current configuration, request and context.
         :param exception: current exception.
         :param config: honeybadger configuration.
-        :param request: request object (if any).
         :param context: current honeybadger context.
         :return: True if plugin can generate payload for current exception, False else.
         """
         return False
 
     @abstractmethod
-    def generate_payload(self, config, request, context):
+    def generate_payload(self, config, context):
         """
         Return additional payload for given exception. May be used by actual plugin implementations to gather additional
         information.
         :param config: honeybadger configuration
-        :param request: request object.
         :param context: context gathered so far to send to honeybadger.
         :return: a dictionary with the generated payload.
         """
@@ -61,18 +59,17 @@ class PluginManager(object):
         else:
             logger.warn('Plugin %s already registered' % plugin.name)
 
-    def generate_payload(self, config=None, request=None, context=None):
+    def generate_payload(self, config=None, context=None):
         """
         Generate payload by iterating over registered plugins. Merges .
         :param context: current context.
-        :param request: the request object.
         :param config: honeybadger configuration.
         :return: a dict with the generated payload.
         """
         for name, plugin in iteritems(self._registered):
-            if plugin.supports(config, request, context):
+            if plugin.supports(config, context):
                 logger.debug('Returning payload from plugin %s' % name)
-                return plugin.generate_payload(config, request, context)
+                return plugin.generate_payload(config, context)
 
         logger.debug('No active plugin to generate payload')
         return {

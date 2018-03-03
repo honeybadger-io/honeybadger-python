@@ -15,24 +15,19 @@ class Honeybadger(object):
     def __init__(self):
         self.config = Configuration()
         self.thread_local = threading.local()
-        self.thread_local.request = None
         self.thread_local.context = {}
 
     def _send_notice(self, exception, exc_traceback=None, context={}):
-        payload = create_payload(exception, exc_traceback, request=self._get_request(), config=self.config, context=context)
+        payload = create_payload(exception, exc_traceback, config=self.config, context=context)
         if self.config.is_dev() and not self.config.force_report_data:
             fake_connection.send_notice(self.config, payload)
         else:
             connection.send_notice(self.config, payload)
 
-    def _get_request(self):
-        return getattr(self.thread_local, 'request', None)
-
     def _get_context(self):
         return getattr(self.thread_local, 'context', {})
 
     def begin_request(self, request):
-        self.thread_local.request = request
         self.thread_local.context = self._get_context()
 
     def wrap_excepthook(self, func):

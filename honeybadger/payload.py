@@ -86,11 +86,11 @@ def server_payload(config):
     return payload
 
 
-def create_payload(exception, exc_traceback=None, config=None, request=None, context={}):
+def create_payload(exception, exc_traceback=None, config=None, context={}):
     if exc_traceback is None:
         exc_traceback = sys.exc_info()[2]
 
-    payload = default_plugin_manager.generate_payload(config, request, context)
+    payload = default_plugin_manager.generate_payload(config, context)
 
     return {
         'notifier': {

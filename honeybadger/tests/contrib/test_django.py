@@ -1,16 +1,11 @@
 import unittest
-from django.conf import settings
+
 from django.conf.urls import url
 from django.http import JsonResponse
 from django.test import RequestFactory
-from mock import Mock
 
 from honeybadger.config import Configuration
-from honeybadger.contrib.django import DjangoPlugin
-
-settings.configure(
-    ALLOWED_HOSTS=['testserver']
-)
+from honeybadger.contrib.django import DjangoPlugin, clear_request, set_request
 
 
 def view(request):
@@ -25,17 +20,21 @@ class DjangoPluginTestCase(unittest.TestCase):
         self.config = Configuration()
         self.url = url(r'test', view, name='test_view')
 
+    def tearDown(self):
+        clear_request()
+
     def test_supports_django_request(self):
         request = self.rf.get('test')
-        self.assertTrue(self.plugin.supports(self.config, request, {}))
+        set_request(request)
 
-    def test_supports_non_django_request(self):
-        self.assertFalse(self.plugin.supports(self.config, Mock(), {}))
+        self.assertTrue(self.plugin.supports(self.config, {}))
 
     def test_generate_payload_get(self):
         request = self.rf.get('test', {'a': 1})
         request.resolver_match = self.url.resolve('test')
-        payload = self.plugin.generate_payload(self.config, request, {'foo': 'bar'})
+        set_request(request)
+
+        payload = self.plugin.generate_payload(self.config, {'foo': 'bar'})
         self.assertEqual(payload['url'], 'http://testserver/test?a=1')
         self.assertEqual(payload['action'], 'view')
         self.assertDictEqual(payload['params'], {'a': ['1']})
@@ -45,7 +44,9 @@ class DjangoPluginTestCase(unittest.TestCase):
     def test_generate_payload_post(self):
         request = self.rf.post('test', data={'a': 1, 'b': 2, 'password': 'notsafe'})
         request.resolver_match = self.url.resolve('test')
-        payload = self.plugin.generate_payload(self.config, request, {'foo': 'bar'})
+        set_request(request)
+
+        payload = self.plugin.generate_payload(self.config, {'foo': 'bar'})
         self.assertEqual(payload['url'], 'http://testserver/test')
         self.assertEqual(payload['action'], 'view')
         self.assertDictEqual(payload['params'], {'a': ['1'], 'b': ['2'], 'password': '[FILTERED]'})
@@ -56,7 +57,9 @@ class DjangoPluginTestCase(unittest.TestCase):
         request = self.rf.get('test')
         request.resolver_match = self.url.resolve('test')
         request.session = {'lang': 'en'}
-        payload = self.plugin.generate_payload(self.config, request, {'foo': 'bar'})
+        set_request(request)
+
+        payload = self.plugin.generate_payload(self.config, {'foo': 'bar'})
         self.assertEqual(payload['url'], 'http://testserver/test')
         self.assertEqual(payload['action'], 'view')
         self.assertDictEqual(payload['session'], {'lang': 'en'})
