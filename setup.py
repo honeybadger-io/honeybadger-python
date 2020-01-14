@@ -9,7 +9,7 @@ tests_require = ['nose', 'mock', 'testfixtures', 'blinker', 'Flask>=1.0']
 if sys.version_info[0:2] <= (3, 4):
     tests_require.append('Django>=1.11,<1.12')
 else:
-    tests_require.append('Django>=2.1,<3.0')
+    tests_require.append('Django>=2.1,<4.0')
 
 
 def get_version():
