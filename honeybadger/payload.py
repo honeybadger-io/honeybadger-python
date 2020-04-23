@@ -7,7 +7,12 @@ from six.moves import zip
 from io import open
 from datetime import datetime
 
-import psutil
+try:
+    import psutil
+    HAVE_PS_UTIL = True
+except ImportError:
+    # Building for Lambda this is unavailable using Serverless and is unneeded on a lambda
+    HAVE_PS_UTIL = False
 
 from .version import __version__
 from .plugins import default_plugin_manager
@@ -63,25 +68,34 @@ def server_payload(config):
         'stats': {}
     }
 
-    s = psutil.virtual_memory()
-    loadavg = os.getloadavg()
+    if HAVE_PS_UTIL:
+        s = psutil.virtual_memory()
+        loadavg = os.getloadavg()
 
-    free = float(s.free) / 1048576.0
-    buffers = hasattr(s, 'buffers') and float(s.buffers) / 1048576.0 or 0.0
-    cached = hasattr(s, 'cached') and float(s.cached) / 1048576.0 or 0.0
-    total_free = free + buffers + cached
+        free = float(s.free) / 1048576.0
+        buffers = hasattr(s, 'buffers') and float(s.buffers) / 1048576.0 or 0.0
+        cached = hasattr(s, 'cached') and float(s.cached) / 1048576.0 or 0.0
+        total_free = free + buffers + cached
 
 
-    payload['stats']['mem'] = {
-        'total': float(s.total) / 1048576.0, # bytes -> megabytes
-        'free': free,
-        'buffers': buffers,
-        'cached': cached,
-        'total_free': total_free
-    }
+        payload['stats']['mem'] = {
+            'total': float(s.total) / 1048576.0, # bytes -> megabytes
+            'free': free,
+            'buffers': buffers,
+            'cached': cached,
+            'total_free': total_free
+        }
 
-    payload['stats']['load'] = dict(zip(('one', 'five', 'fifteen'), loadavg))
-
+        payload['stats']['load'] = dict(zip(('one', 'five', 'fifteen'), loadavg))
+    else:
+        payload['stats']['mem'] = {
+            'total': 0.0,
+            'free': 0.0,
+            'buffers': 0.0,
+            'cached': 0.0,
+            'total_free': 0.0,
+        }
+        payload['stats']['load'] = dict(zip(('one', 'five', 'fifteen'), (0.0, 0.0, 0.0)))
     return payload
 
 
