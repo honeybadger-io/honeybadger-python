@@ -81,7 +81,11 @@ class DjangoPlugin(Plugin):
         if hasattr(request, 'session'):
             payload['session'] = filter_dict(dict(request.session), config.params_filters)
 
-        payload['params'] = filter_dict(dict(getattr(request, request.method)), config.params_filters)
+        if request.method == 'GET':
+            payload['params'] = filter_dict(dict(request.GET), config.params_filters)
+            
+        else:
+            payload['params'] = filter_dict(dict(request.POST), config.params_filters)
 
         return payload
 
