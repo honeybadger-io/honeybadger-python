@@ -22,7 +22,7 @@ class Configuration(object):
         self.environment = 'production'
         self.hostname = socket.gethostname()
         self.endpoint = 'https://api.honeybadger.io'
-        self.params_filters = ['password', 'password_confirmation', 'credit_card']
+        self.params_filters = ['password', 'password_confirmation', 'credit_card', 'CSRF_COOKIE']
         self.force_report_data = False
 
         self.set_12factor_config()

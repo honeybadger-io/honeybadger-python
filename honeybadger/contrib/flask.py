@@ -51,7 +51,8 @@ class FlaskPlugin(Plugin):
             for k, v in iteritems(_request.headers)
         }
         cgi_data.update({
-            'REQUEST_METHOD': _request.method
+            'REQUEST_METHOD': _request.method,
+            'COOKIES': _request.cookies
         })
         payload = {
             'url': _request.base_url,
@@ -59,7 +60,7 @@ class FlaskPlugin(Plugin):
             'action': _request.endpoint,
             'params': {},
             'session': filter_dict(dict(session), config.params_filters),
-            'cgi_data': cgi_data,
+            'cgi_data': filter_dict(cgi_data, config.params_filters),
             'context': context
         }
 
