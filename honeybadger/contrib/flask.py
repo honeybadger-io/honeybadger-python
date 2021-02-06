@@ -52,7 +52,7 @@ class FlaskPlugin(Plugin):
         }
         cgi_data.update({
             'REQUEST_METHOD': _request.method,
-            'COOKIES': _request.cookies
+            'COOKIES': dict(_request.cookies)
         })
         payload = {
             'url': _request.base_url,
