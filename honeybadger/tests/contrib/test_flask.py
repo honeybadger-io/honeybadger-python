@@ -96,7 +96,8 @@ class FlaskPluginTestCase(unittest.TestCase):
                 'Host': 'server:1234',
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'Content-Length': '29',
-                'REQUEST_METHOD': 'POST'
+                'REQUEST_METHOD': 'POST',
+                'COOKIES': {}
             })
             self.assertDictEqual(payload['context'], {'k': 'value'})
 
