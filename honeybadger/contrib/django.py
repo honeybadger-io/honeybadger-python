@@ -82,7 +82,7 @@ class DjangoPlugin(Plugin):
             payload['session'] = filter_dict(dict(request.session), config.params_filters)
 
         if hasattr(request, 'COOKIES'):
-            payload['cgi_data']['COOKIES'] = filter_dict(request.COOKIES, config.params_filters)
+            payload['cgi_data']['HTTP_COOKIE'] = filter_dict(request.COOKIES, config.params_filters)
 
         if request.method == 'GET':
             payload['params'] = filter_dict(dict(request.GET), config.params_filters)
