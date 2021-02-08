@@ -4,10 +4,10 @@ CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
-#### Added
-- Added 'CSRF_COOKIE' to default filter_params(#44)
-- Added HTTP_COOKIE to payload for flask & django(#44)
-- Added filtering meta attributes for flask & django(#43)
+### Added
+- Add `CSRF_COOKIE` to default filter_params (#44)
+- Add `HTTP_COOKIE` to payload for flask & django (#44)
+- Filter meta (cgi_data) attributes for flask & django (#43)
 
 ## [0.4.2] - 2021-02-04
 ### Fixed
