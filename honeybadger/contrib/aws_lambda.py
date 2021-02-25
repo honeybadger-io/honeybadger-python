@@ -88,7 +88,9 @@ class AWSLambdaPlugin(Plugin):
         request event
         """
         payload = {
-            "event": current_event(),
+            "params": {
+                "event": current_event()
+            },
             "context": {}
         }
         return filter_dict(payload, config.params_filters)
