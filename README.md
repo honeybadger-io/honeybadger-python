@@ -114,7 +114,7 @@ The following conventions are used for component names:
 
 ### AWS Lambda
 
-AWS Lambda environments are auto detected by honeybadger with no additional configuration.
+AWS Lambda environments are auto detected by Honeybadger with no additional configuration.
 Here's an example lambda function with Honeybadger:
 
 ```python
