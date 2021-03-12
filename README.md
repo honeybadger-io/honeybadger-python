@@ -111,6 +111,25 @@ The following conventions are used for component names:
 - For class-based views, the name of the component will be _\<module name>___#___\<class name>_
 - When using blueprints, the name of the component will be  _\<module name>___#___\<blueprint name>_._\<view name>_
 
+
+### AWS Lambda
+
+AWS Lambda environments are auto detected by honeybadger with no additional configuration.
+Below is an example lambda function and how honeybadger can be used 
+
+```python
+from honeybadger import honeybadger
+honeybadger.configure(api_key='myapikey')
+
+def lambda_handler(event, context):
+    """
+    A buggy lambda function that tries to perform a zero division
+    """
+    a = 1
+    b = 0
+
+    return (a/b) #This will be reported
+```
 ### Other frameworks / plain Python app
 
 Django and Flask are the only explicitly supported frameworks at the moment. For other frameworks (tornado, web2py, etc.) or a plain Python script, simply import honeybadger and configure it with your API key. Honeybadger uses a global exception hook to automatically report any uncaught exceptions.
