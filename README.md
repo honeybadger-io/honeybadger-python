@@ -27,7 +27,7 @@ In a Django application, add the Honeybadger Django middleware to *the top* of y
 
 ```python
 MIDDLEWARE = [
-  'honeybadger.middleware.DjangoHoneybadgerMiddleware',
+  'honeybadger.contrib.DjangoHoneybadgerMiddleware',
   ...
 ]
 ```

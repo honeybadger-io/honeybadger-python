@@ -59,7 +59,7 @@ class PluginManager(object):
         else:
             logger.warn('Plugin %s already registered' % plugin.name)
 
-    def generate_payload(self, config=None, context=None):
+    def generate_payload(self, default_payload, config=None, context=None):
         """
         Generate payload by iterating over registered plugins. Merges .
         :param context: current context.
@@ -69,12 +69,12 @@ class PluginManager(object):
         for name, plugin in iteritems(self._registered):
             if plugin.supports(config, context):
                 logger.debug('Returning payload from plugin %s' % name)
-                return plugin.generate_payload(config, context)
+                
+                return plugin.generate_payload(default_payload, config, context)
 
         logger.debug('No active plugin to generate payload')
-        return {
-            'context': context
-        }
+        
+        return default_payload
 
 # Global plugin manager
 default_plugin_manager = PluginManager()

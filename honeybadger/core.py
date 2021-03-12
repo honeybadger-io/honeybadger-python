@@ -4,6 +4,7 @@ import sys
 import logging
 import copy
 
+from honeybadger.plugins import default_plugin_manager
 import honeybadger.connection as connection
 import honeybadger.fake_connection as fake_connection
 from .payload import create_payload
@@ -53,6 +54,14 @@ class Honeybadger(object):
 
     def configure(self, **kwargs):
         self.config.set_config_from_dict(kwargs)
+        self.auto_discover_plugins()
+
+    def auto_discover_plugins(self):
+        #Avoiding circular import error
+        from honeybadger import contrib
+        
+        if self.config.is_aws_lambda_environment:
+            default_plugin_manager.register(contrib.AWSLambdaPlugin())
 
     def set_context(self, **kwargs):
         # This operation is an update, not a set!

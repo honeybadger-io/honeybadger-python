@@ -28,5 +28,9 @@ def send_notice(config, payload):
         if status != 201:
             logger.error("Received error response [{}] from Honeybadger API.".format(status))
 
-    t = threading.Thread(target=send_request)
-    t.start()
+    if config.force_sync:
+        send_request()
+        
+    else:
+        t = threading.Thread(target=send_request)
+        t.start()

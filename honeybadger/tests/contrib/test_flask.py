@@ -23,6 +23,7 @@ class FlaskPluginTestCase(unittest.TestCase):
             self.skipTest('Flask 1.1 requires Python > 3.4')
 
         self.config = Configuration()
+        self.default_payload = {}
 
         self.app = flask.Flask(__name__)
         self.app.secret_key = 'safe'
@@ -49,75 +50,77 @@ class FlaskPluginTestCase(unittest.TestCase):
                                            headers={
                                                'X-Wizard-Color': 'grey'
                                            }):
-            payload = self.plugin.generate_payload(self.config, {'k': 'value'})
+            payload = self.plugin.generate_payload(self.default_payload, self.config, {'k': 'value'})
 
-            self.assertEqual(payload['url'], 'http://server:1234/path/test')
-            self.assertEqual(payload['component'], 'honeybadger.tests.contrib.test_flask')
-            self.assertEqual(payload['action'], 'foo')
-            self.assertDictEqual(payload['params'], {'a': ['1', '2'], 'foo': ['bar']})
-            self.assertDictEqual(payload['session'], {})
+            self.assertEqual(payload['request']['url'], 'http://server:1234/path/test')
+            self.assertEqual(payload['request']['component'], 'honeybadger.tests.contrib.test_flask')
+            self.assertEqual(payload['request']['action'], 'foo')
+            self.assertDictEqual(payload['request']['params'], {'a': ['1', '2'], 'foo': ['bar']})
+            self.assertDictEqual(payload['request']['session'], {})
             self.assertDictContainsSubset({
                 'Host': 'server:1234',
                 'X-Wizard-Color': 'grey',
                 'REQUEST_METHOD': 'GET'
-            }, payload['cgi_data'])
-            self.assertDictEqual(payload['context'], {'k': 'value'})
+            }, payload['request']['cgi_data'])
+            self.assertDictEqual(payload['request']['context'], {'k': 'value'})
 
     def test_get_request_with_session(self):
         with self.app.test_request_context(path='/test', base_url='http://server:1234/path') as ctx:
             ctx.session['answer'] = 42
             ctx.session['password'] = 'this is fine'
 
-            payload = self.plugin.generate_payload(self.config, {'k': 'value'})
+            payload = self.plugin.generate_payload(self.default_payload, self.config, {'k': 'value'})
 
-            self.assertEqual(payload['url'], 'http://server:1234/path/test')
-            self.assertEqual(payload['component'], 'honeybadger.tests.contrib.test_flask')
-            self.assertEqual(payload['action'], 'foo')
-            self.assertDictEqual(payload['params'], {})
-            self.assertDictEqual(payload['session'], {'answer': 42, 'password': '[FILTERED]'})
+            self.assertEqual(payload['request']['url'], 'http://server:1234/path/test')
+            self.assertEqual(payload['request']['component'], 'honeybadger.tests.contrib.test_flask')
+            self.assertEqual(payload['request']['action'], 'foo')
+            self.assertDictEqual(payload['request']['params'], {})
+            self.assertDictEqual(payload['request']['session'], {'answer': 42, 'password': '[FILTERED]'})
             self.assertDictContainsSubset({
                 'Host': 'server:1234',
                 'REQUEST_METHOD': 'GET'
-            }, payload['cgi_data'])
-            self.assertDictEqual(payload['context'], {'k': 'value'})
+            }, payload['request']['cgi_data'])
+            self.assertDictEqual(payload['request']['context'], {'k': 'value'})
 
     def test_post_request(self):
         with self.app.test_request_context(path='/test', base_url='http://server:1234/path', method='POST',
                                            data={'foo': 'bar', 'password': 'this is file'}):
 
-            payload = self.plugin.generate_payload(self.config, {'k': 'value'})
+            payload = self.plugin.generate_payload(self.default_payload, self.config, {'k': 'value'})
 
-            self.assertEqual(payload['url'], 'http://server:1234/path/test')
-            self.assertEqual(payload['component'], 'honeybadger.tests.contrib.test_flask')
-            self.assertEqual(payload['action'], 'foo')
-            self.assertDictEqual(payload['params'], {'foo': ['bar'], 'password': '[FILTERED]'})
-            self.assertDictEqual(payload['session'], {})
-            self.assertDictEqual(payload['cgi_data'], {
+            self.assertEqual(payload['request']['url'], 'http://server:1234/path/test')
+            self.assertEqual(payload['request']['component'], 'honeybadger.tests.contrib.test_flask')
+            self.assertEqual(payload['request']['action'], 'foo')
+            self.assertDictEqual(payload['request']['params'], {'foo': ['bar'], 'password': '[FILTERED]'})
+            self.assertDictEqual(payload['request']['session'], {})
+            self.assertDictEqual(payload['request']['cgi_data'], {
                 'Host': 'server:1234',
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'Content-Length': '29',
-                'REQUEST_METHOD': 'POST'
+                'REQUEST_METHOD': 'POST',
+                'HTTP_COOKIE': {}
             })
-            self.assertDictEqual(payload['context'], {'k': 'value'})
+            self.assertDictEqual(payload['request']['context'], {'k': 'value'})
 
     def test_put_request(self):
         with self.app.test_request_context(path='/test', base_url='http://server:1234/path', method='PUT',
                                            data={'foo': 'bar', 'password': 'this is file'}):
 
-            payload = self.plugin.generate_payload(self.config, {'k': 'value'})
+            payload = self.plugin.generate_payload(self.default_payload, self.config, {'k': 'value'})
 
-            self.assertEqual(payload['url'], 'http://server:1234/path/test')
-            self.assertEqual(payload['component'], 'honeybadger.tests.contrib.test_flask')
-            self.assertEqual(payload['action'], 'foo')
-            self.assertDictEqual(payload['params'], {'foo': ['bar'], 'password': '[FILTERED]'})
-            self.assertDictEqual(payload['session'], {})
-            self.assertDictEqual(payload['cgi_data'], {
+            self.assertEqual(payload['request']['url'], 'http://server:1234/path/test')
+            self.assertEqual(payload['request']['component'], 'honeybadger.tests.contrib.test_flask')
+            self.assertEqual(payload['request']['action'], 'foo')
+            self.assertDictEqual(payload['request']['params'], {'foo': ['bar'], 'password': '[FILTERED]'})
+            self.assertDictEqual(payload['request']['session'], {})
+            self.assertDictEqual(payload['request']['cgi_data'], {
                 'Host': 'server:1234',
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'Content-Length': '29',
-                'REQUEST_METHOD': 'PUT'
+                'REQUEST_METHOD': 'PUT',
+                'HTTP_COOKIE': {}
             })
-            self.assertDictEqual(payload['context'], {'k': 'value'})
+            self.assertDictEqual(payload['request']['context'], {'k': 'value'})
 
 
 class FlaskHoneybadgerTestCase(unittest.TestCase):

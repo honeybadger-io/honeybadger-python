@@ -59,7 +59,7 @@ class DjangoPlugin(Plugin):
         request = current_request()
         return request is not None and re.match(r'^django\.', request.__module__)
 
-    def generate_payload(self, config, context):
+    def generate_payload(self, default_payload, config, context):
         """
         Generate payload by checking Django request object.
         :param context: current context.
@@ -68,26 +68,31 @@ class DjangoPlugin(Plugin):
         """
         request = current_request()
 
-        payload = {
+        request_payload = {
             'url': request.build_absolute_uri(),
             'component': request.resolver_match.app_name,
             'action': request.resolver_match.func.__name__,
             'params': {},
             'session': {},
-            'cgi_data': dict(request.META),
+            'cgi_data': filter_dict(request.META, config.params_filters),
             'context': context
         }
 
         if hasattr(request, 'session'):
-            payload['session'] = filter_dict(dict(request.session), config.params_filters)
+            request_payload['session'] = filter_dict(dict(request.session), config.params_filters)
+
+        if hasattr(request, 'COOKIES'):
+            request_payload['cgi_data']['HTTP_COOKIE'] = filter_dict(request.COOKIES, config.params_filters)
 
         if request.method == 'GET':
-            payload['params'] = filter_dict(dict(request.GET), config.params_filters)
+            request_payload['params'] = filter_dict(dict(request.GET), config.params_filters)
             
         else:
-            payload['params'] = filter_dict(dict(request.POST), config.params_filters)
+            request_payload['params'] = filter_dict(dict(request.POST), config.params_filters)
 
-        return payload
+        default_payload['request'] = request_payload
+
+        return default_payload
 
 
 class DjangoHoneybadgerMiddleware(object):

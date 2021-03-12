@@ -62,6 +62,7 @@ def server_payload(config):
         'pid': os.getpid(),
         'stats': stats_payload()
     }
+    
 
 def stats_payload():
     try:
@@ -94,9 +95,7 @@ def create_payload(exception, exc_traceback=None, config=None, context={}):
     if exc_traceback is None:
         exc_traceback = sys.exc_info()[2]
 
-    payload = default_plugin_manager.generate_payload(config, context)
-
-    return {
+    payload =  {
         'notifier': {
             'name': "Honeybadger for Python",
             'url': "https://github.com/honeybadger-io/honeybadger-python",
@@ -104,5 +103,8 @@ def create_payload(exception, exc_traceback=None, config=None, context={}):
         },
         'error':  error_payload(exception, exc_traceback, config),
         'server': server_payload(config),
-        'request': payload,
+        'request': {'context':context}
     }
+
+    return default_plugin_manager.generate_payload(payload, config, context)
+    

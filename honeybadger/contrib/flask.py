@@ -32,7 +32,7 @@ class FlaskPlugin(Plugin):
         else:
             return bool(request)
 
-    def generate_payload(self, config, context):
+    def generate_payload(self, default_payload, config, context):
         """
         Generate payload by checking Flask request object.
         :param context: current context.
@@ -51,7 +51,8 @@ class FlaskPlugin(Plugin):
             for k, v in iteritems(_request.headers)
         }
         cgi_data.update({
-            'REQUEST_METHOD': _request.method
+            'REQUEST_METHOD': _request.method,
+            'HTTP_COOKIE' : dict(_request.cookies)
         })
         payload = {
             'url': _request.base_url,
@@ -59,7 +60,7 @@ class FlaskPlugin(Plugin):
             'action': _request.endpoint,
             'params': {},
             'session': filter_dict(dict(session), config.params_filters),
-            'cgi_data': cgi_data,
+            'cgi_data': filter_dict(cgi_data, config.params_filters),
             'context': context
         }
 
@@ -69,7 +70,9 @@ class FlaskPlugin(Plugin):
 
         payload['params'] = params
 
-        return payload
+        default_payload['request'] = payload
+
+        return default_payload
 
 
 class FlaskHoneybadger(object):

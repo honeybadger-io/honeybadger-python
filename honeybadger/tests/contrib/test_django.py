@@ -50,6 +50,7 @@ class DjangoPluginTestCase(unittest.TestCase):
         self.rf = RequestFactory()
         self.config = Configuration()
         self.url = url(r'test', plain_view, name='test_view')
+        self.default_payload = {}
 
     def tearDown(self):
         clear_request()
@@ -65,24 +66,24 @@ class DjangoPluginTestCase(unittest.TestCase):
         request.resolver_match = self.url.resolve('test')
         set_request(request)
 
-        payload = self.plugin.generate_payload(self.config, {'foo': 'bar'})
-        self.assertEqual(payload['url'], 'http://testserver/test?a=1')
-        self.assertEqual(payload['action'], 'plain_view')
-        self.assertDictEqual(payload['params'], {'a': ['1']})
-        self.assertDictEqual(payload['session'], {})
-        self.assertDictEqual(payload['context'], {'foo': 'bar'})
+        payload = self.plugin.generate_payload(self.default_payload, self.config, {'foo': 'bar'})
+        self.assertEqual(payload['request']['url'], 'http://testserver/test?a=1')
+        self.assertEqual(payload['request']['action'], 'plain_view')
+        self.assertDictEqual(payload['request']['params'], {'a': ['1']})
+        self.assertDictEqual(payload['request']['session'], {})
+        self.assertDictEqual(payload['request']['context'], {'foo': 'bar'})
 
     def test_generate_payload_post(self):
         request = self.rf.post('test', data={'a': 1, 'b': 2, 'password': 'notsafe'})
         request.resolver_match = self.url.resolve('test')
         set_request(request)
 
-        payload = self.plugin.generate_payload(self.config, {'foo': 'bar'})
-        self.assertEqual(payload['url'], 'http://testserver/test')
-        self.assertEqual(payload['action'], 'plain_view')
-        self.assertDictEqual(payload['params'], {'a': ['1'], 'b': ['2'], 'password': '[FILTERED]'})
-        self.assertDictEqual(payload['session'], {})
-        self.assertDictEqual(payload['context'], {'foo': 'bar'})
+        payload = self.plugin.generate_payload(self.default_payload, self.config, {'foo': 'bar'})
+        self.assertEqual(payload['request']['url'], 'http://testserver/test')
+        self.assertEqual(payload['request']['action'], 'plain_view')
+        self.assertDictEqual(payload['request']['params'], {'a': ['1'], 'b': ['2'], 'password': '[FILTERED]'})
+        self.assertDictEqual(payload['request']['session'], {})
+        self.assertDictEqual(payload['request']['context'], {'foo': 'bar'})
 
     def test_generate_payload_with_session(self):
         request = self.rf.get('test')
@@ -90,11 +91,11 @@ class DjangoPluginTestCase(unittest.TestCase):
         request.session = {'lang': 'en'}
         set_request(request)
 
-        payload = self.plugin.generate_payload(self.config, {'foo': 'bar'})
-        self.assertEqual(payload['url'], 'http://testserver/test')
-        self.assertEqual(payload['action'], 'plain_view')
-        self.assertDictEqual(payload['session'], {'lang': 'en'})
-        self.assertDictEqual(payload['context'], {'foo': 'bar'})
+        payload = self.plugin.generate_payload(self.default_payload, self.config, {'foo': 'bar'})
+        self.assertEqual(payload['request']['url'], 'http://testserver/test')
+        self.assertEqual(payload['request']['action'], 'plain_view')
+        self.assertDictEqual(payload['request']['session'], {'lang': 'en'})
+        self.assertDictEqual(payload['request']['context'], {'foo': 'bar'})
 
 # TODO: add an integration test case that tests the actual integration with Django
 
