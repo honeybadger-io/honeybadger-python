@@ -1,6 +1,4 @@
 from honeybadger import honeybadger
-from honeybadger.contrib.aws_lambda import AWSLambdaPlugin
-from honeybadger.plugins import default_plugin_manager
 
 honeybadger.configure(api_key='your api key')
 
