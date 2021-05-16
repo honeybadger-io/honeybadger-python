@@ -200,13 +200,14 @@ A custom API Route is available at [`honeybadger.contrib.fastapi`](./honeybadger
 
 ```python
 from fastapi import FastAPI, APIRouter
-from honeybadger import honeybadger, contrib
+from honeybadger import honeybadger
+from honeybadger.contrib.fastapi import HoneybadgerRoute
 
 honeybadger.configure(api_key="<your-api-key>")
 app = FastAPI()
-app.router.route_class = contrib.HoneybadgerRoute
+app.router.route_class = HoneybadgerRoute
 
-router = APIRouter(route_class=contrib.HoneybadgerRoute)
+router = APIRouter(route_class=HoneybadgerRoute)
 
 ```
 

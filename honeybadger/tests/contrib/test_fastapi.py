@@ -1,7 +1,7 @@
 import unittest
 import aiounittest
 import mock
-from honeybadger import contrib
+from honeybadger.contrib.fastapi import HoneybadgerRoute
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 class FastAPITestCase(unittest.TestCase):
     def setUp(self):
         app = FastAPI()
-        app.router.route_class = contrib.HoneybadgerRoute
+        app.router.route_class = HoneybadgerRoute
 
         @app.get("/ok")
         def ok_route():
