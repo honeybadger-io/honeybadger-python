@@ -118,6 +118,14 @@ class DjangoHoneybadgerMiddleware(object):
         return response
 
     def process_exception(self, request, exception):
+        from django.conf import settings
+        ignored_exceptions = getattr(settings, "HONEYBADGER_IGNORED_EXCEPTIONS", None)
+
+        if ignored_exceptions:
+            name = f"{exception.__class__.__module__}.{exception.__class__.__qualname__}"
+            if name in ignored_exceptions:
+                return None
+
         honeybadger.notify(exception)
         clear_request()
         return None

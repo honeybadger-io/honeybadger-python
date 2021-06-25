@@ -42,6 +42,12 @@ HONEYBADGER = {
 }
 ```
 
+To prevent honeybadger from notifying you on certain errors (like an `Http404` exception), you can add the full path to the exception you would like to ignore to `HONEYBADGER_IGNORED_EXCEPTIONS` in settings:
+
+```python
+HONEYBADGER_IGNORED_EXCEPTIONS = ('django.http.response.Http404',)
+```
+
 ### Flask
 
 A Flask extension is available for initializing and configuring Honeybadger: `honeybadger.contrib.flask.FlaskHoneybadger`. The extension adds the following information to reported exceptions:
