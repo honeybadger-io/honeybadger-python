@@ -332,7 +332,7 @@ The following options are available to you:
 | endpoint | `str` | `"https://api.honeybadger.io"` | `"https://honeybadger.example.com/"` | `HONEYBADGER_ENDPOINT` |
 | params_filters | `list` | `['password', 'password_confirmation', 'credit_card']` | `['super', 'secret', 'keys']` | `HONEYBADGER_PARAMS_FILTERS` |
 | force_report_data | `bool` | `False` | `True` | `HONEYBADGER_FORCE_REPORT_DATA` |
-| excluded_exceptions | `list` | `["AttributeError", "SomeOtherError"]` | `HONEYBADGER_EXCLUDED_EXCEPTIONS` |
+| excluded_exceptions | `list` | `[]` | `['Http404', 'MyCustomIgnoredError']` | `HONEYBADGER_EXCLUDED_EXCEPTIONS`
 | force_sync | `bool` | `False` | `True` | `HONEYBADGER_FORCE_SYNC` |
 
 ## Public Methods

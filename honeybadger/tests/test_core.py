@@ -90,6 +90,21 @@ def test_notify_with_exception():
         hb.configure(api_key='aaa', force_report_data=True)
         hb.notify(ValueError('Test value error.'))
 
+
+def test_notify_with_excluded_exception():
+    def test_payload(request):
+        payload = json.loads(request.data.decode('utf-8'))
+        eq_(payload['error']['class'], 'AttributeError')
+        eq_(payload['error']['message'], 'Test attribute error.')
+
+    hb = Honeybadger()
+
+    with mock_urlopen(test_payload) as request_mock:
+        hb.configure(api_key='aaa', force_report_data=True, excluded_exceptions=['ValueError'])
+        hb.notify(ValueError('Test value error.'))
+        hb.notify(AttributeError('Test attribute error.'))
+
+
 def test_notify_context_merging():
     def test_payload(request):
         payload = json.loads(request.data.decode('utf-8'))
