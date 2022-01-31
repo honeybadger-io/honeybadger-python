@@ -49,9 +49,9 @@ A Flask extension is available for initializing and configuring Honeybadger: `ho
 - **url**: The URL the request was sent to.
 - **component**: The module that the view is defined at. If the view is a class-based view, then the name of the class is also added.
 - **action**: The name of the function called. If the action is defined within a blueprint, then the action name will have the name of the blueprint prefixed.
-- **params**: A dictionary containing query parameters and form data. If a variable is defined in both, then the form data are stored. Params are filtered (see [Configuration](#config)).
+- **params**: A dictionary containing query parameters and form data. If a variable is defined in both, then the form data are stored. Params are filtered (see [Configuration](#configuration)).
 - **session**: Session data.
-- **cgi_data**: Request headers, filtered (see [Configuration](#config)) and request method.
+- **cgi_data**: Request headers, filtered (see [Configuration](#configuration)) and request method.
 
 In addition, the `FlaskHoneybadger` extension:
 - Configures Honeybadger using Flask's [configuration object](http://flask.pocoo.org/docs/latest/config/#configuration-basics).
@@ -62,7 +62,7 @@ In addition, the `FlaskHoneybadger` extension:
 order for the extension to work, you'll have to install the `blinker` library as dependency.
 
 `FlaskHoneybadger` checks Flask's configuration object for automatically configuring honeybadger. In order to configure it, it checks for the
-keys with same name as the environment variables in [Configuration](#config) section. Note that if a value is also configured as an environment variable,
+keys with same name as the environment variables in [Configuration](#configuration) section. Note that if a value is also configured as an environment variable,
 then the environment variable's value will be used.
 
 #### Example
