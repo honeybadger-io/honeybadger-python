@@ -4,6 +4,8 @@ CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+- Django example actually generates an alert
+- target Django v4 in CI but not with Python v3.7
 
 ## [0.15.2] - 2023-03-31
 - honeybadger.notify() now returns notice uuid (#139) 

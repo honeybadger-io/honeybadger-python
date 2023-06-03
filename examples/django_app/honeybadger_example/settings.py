@@ -24,6 +24,9 @@ SECRET_KEY = '&q0a-xvwu-b^x-@p)n$t7#=w&69tv*@s(qp7n0!^b_$=1(8z53'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
+HONEYBADGER = {
+    'FORCE_REPORT_DATA': True,
+}
 
 ALLOWED_HOSTS = []
 

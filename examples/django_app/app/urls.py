@@ -1,8 +1,8 @@
-from django.conf.urls import url
+from django.urls import re_path
 
 from . import views
 
 urlpatterns = [
-    url(r'^greet$', views.greet, name='greet'),
-    url(r'^div$', views.buggy_div, name='div'),
+    re_path(r'^greet$', views.greet, name='greet'),
+    re_path(r'^div$', views.buggy_div, name='div'),
 ]
