@@ -1,0 +1,23 @@
+# these are dev/test requirements only
+
+mock==5.0.*
+testfixtures==7.1.*
+
+blinker==1.6.*; python_version <= '3.7'
+blinker; python_version >= '3.8'
+
+async_asgi_testclient==1.4.*
+aiounittest==1.4.*
+
+fastapi==0.96.*
+httpx==0.24.*
+
+celery==5.2.*; python_version <= '3.10'
+# temp hack while we wait for 5.3 release
+https://github.com/celery/celery/archive/v5.3.0rc2.tar.gz; python_version >= '3.11'
+importlib-metadata==4.13.0; python_version <= '3.7'
+
+# these are overridden specific versions by tox
+Django
+Flask
+# TODO: only run Django tests in Django env and same with Flask
