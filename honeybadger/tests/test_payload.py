@@ -12,7 +12,7 @@ from honeybadger.payload import (
 from honeybadger.config import Configuration
 
 from mock import patch
-from nose.tools import eq_, ok_, assert_raises
+from pytest import raises
 
 # TODO: figure out how to run Django tests?
 
@@ -136,7 +136,7 @@ def test_create_payload_without_local_variables():
 
 def test_create_payload_with_local_variables():
     config = Configuration(report_local_variables=True)
-    with assert_raises(Exception):
+    with raises(Exception):
         test_local_variable = {"test": "var"}
         exception = Exception('Test')
         payload = create_payload(exception, config=config)

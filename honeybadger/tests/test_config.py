@@ -1,7 +1,8 @@
 from __future__ import print_function
 
 import os
-from nose.tools import raises
+
+from pytest import raises
 
 from honeybadger.config import Configuration
 
@@ -30,10 +31,10 @@ def test_config_bool_types_are_accurate():
     del os.environ['HONEYBADGER_FORCE_REPORT_DATA']
     assert c.force_report_data == True
 
-@raises(AttributeError)
 def test_can_only_set_valid_options():
-    c = Configuration(foo='bar')
-    print(c.foo)
+    with raises(AttributeError):
+        c = Configuration(foo='bar')
+        print(c.foo)
 
 def test_valid_dev_environments():
     valid_dev_environments = ['development', 'dev', 'test']

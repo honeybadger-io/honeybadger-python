@@ -1,9 +1,6 @@
 import json
 import threading
 
-from nose.tools import eq_, ok_
-from nose.tools import raises
-
 from .utils import mock_urlopen
 from honeybadger import Honeybadger
 from mock import MagicMock, patch

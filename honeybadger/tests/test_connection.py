@@ -1,6 +1,6 @@
 import json
 import logging
-from nose.tools import eq_
+
 from six import b
 from .utils import mock_urlopen
 
