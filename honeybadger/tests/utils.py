@@ -5,6 +5,7 @@ import six
 import time
 from threading import Event
 
+
 @contextmanager
 def mock_urlopen(func, status=201):
     mock_called_event = Event()

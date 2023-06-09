@@ -5,8 +5,10 @@ import aiounittest
 import mock
 from honeybadger import contrib
 
+
 class SomeError(Exception):
     pass
+
 
 def asgi_app():
     """Example ASGI App."""
@@ -19,6 +21,7 @@ def asgi_app():
         await send({"type": "http.response.body", "body": body})
     return app
 
+
 class ASGIPluginTestCase(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(contrib.ASGIHoneybadger(asgi_app(), api_key="abcd"))
@@ -29,7 +32,7 @@ class ASGIPluginTestCase(unittest.TestCase):
         non_asgi_context = {}
         self.assertTrue(self.client.application.supports(hb.config, asgi_context))
         self.assertFalse(self.client.application.supports(hb.config, non_asgi_context))
-    
+
     @aiounittest.async_test
     @mock.patch("honeybadger.contrib.asgi.honeybadger")
     async def test_should_notify_exception(self, hb):
@@ -43,4 +46,3 @@ class ASGIPluginTestCase(unittest.TestCase):
     async def test_should_not_notify_exception(self, hb):
         response = await self.client.get("/")
         hb.notify.assert_not_called() 
-    

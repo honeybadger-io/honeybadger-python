@@ -16,12 +16,15 @@ from honeybadger import honeybadger
 import logging
 logging.getLogger('honeybadger').addHandler(logging.StreamHandler())
 
+
 def method_two():
     mydict = dict(a=1)
     print(mydict['b'])
 
+
 def method_one():
     method_two()
+
 
 if __name__ == '__main__':
     honeybadger.set_context(user_email="user@example.com")

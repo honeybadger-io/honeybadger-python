@@ -8,6 +8,7 @@ from typing import Callable
 from honeybadger import honeybadger
 from honeybadger.contrib import asgi
 
+
 class HoneybadgerRoute(APIRoute):
     def get_route_handler(self) -> Callable:
         original_route_handler = super().get_route_handler()

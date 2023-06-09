@@ -32,6 +32,7 @@ try:
 except:
     pass
 
+
 def versions_match():
     import django
 
@@ -49,13 +50,14 @@ def versions_match():
             return True
     return False
 
+
 class DjangoPluginTestCase(unittest.TestCase):
     def setUp(self):
         self.plugin = DjangoPlugin()
         self.rf = RequestFactory()
         self.config = Configuration()
         self.url = re_path(r'test', plain_view, name='test_view')
-        self.default_payload = {'request':{}}
+        self.default_payload = {'request': {}}
 
     def tearDown(self):
         clear_request()
@@ -103,6 +105,7 @@ class DjangoPluginTestCase(unittest.TestCase):
         self.assertDictEqual(payload['request']['context'], {'foo': 'bar'})
 
 # TODO: add an integration test case that tests the actual integration with Django
+
 
 class DjangoMiddlewareTestCase(unittest.TestCase):
     def setUp(self):
@@ -168,7 +171,6 @@ class DjangoMiddlewareIntegrationTestCase(SimpleTestCase):
             self.assertEqual(error_payload['error']['class'], 'ValueError')
             self.assertEqual(error_payload['error']['message'], 'always fails')
 
-
         with mock_urlopen(assert_payload) as request_mock:
             try:
                 response = self.client.get('/always_fails/')
@@ -178,7 +180,8 @@ class DjangoMiddlewareIntegrationTestCase(SimpleTestCase):
 
     @unittest.skipUnless(versions_match(), "Current Python version unsupported by current version of Django")
     @override_settings(
-        MIDDLEWARE=['honeybadger.contrib.django.DjangoHoneybadgerMiddleware', 'honeybadger.tests.contrib.django_test_app.middleware.CustomMiddleware'],
+        MIDDLEWARE=['honeybadger.contrib.django.DjangoHoneybadgerMiddleware',
+                    'honeybadger.tests.contrib.django_test_app.middleware.CustomMiddleware'],
         HONEYBADGER={
             'API_KEY': 'abc123',
         }
@@ -191,7 +194,7 @@ class DjangoMiddlewareIntegrationTestCase(SimpleTestCase):
             self.assertEqual(req.get_full_url(), '{}/v1/notices/'.format(honeybadger.config.endpoint))
             self.assertEqual(error_payload['error']['class'], 'str')
             self.assertEqual(error_payload['error']['message'], 'Custom Middleware Exception')
-                
+
         with mock_urlopen(assert_payload) as request_mock:
             try:
                 response = self.client.get('/plain_view/')

@@ -16,15 +16,18 @@ from honeybadger import honeybadger
 import logging
 logging.getLogger('honeybadger').addHandler(logging.StreamHandler())
 
+
 def method_two():
     mydict = dict(a=1)
     try:
-      print(mydict['b'])
+        print(mydict['b'])
     except KeyError as exc:
-      honeybadger.notify(exc, context={'foo': 'bar'})
+        honeybadger.notify(exc, context={'foo': 'bar'})
+
 
 def method_one():
     method_two()
+
 
 if __name__ == '__main__':
     honeybadger.set_context(user_email="user@example.com")

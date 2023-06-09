@@ -39,6 +39,7 @@ def test_threading():
         notify_thread.join()
         assert fake_connection.call_count == 1
 
+
 def test_notify_fake_connection_dev_environment():
     hb = Honeybadger()
     hb.configure(api_key='aaa')
@@ -48,6 +49,7 @@ def test_notify_fake_connection_dev_environment():
 
             assert fake_connection.call_count == 1
             assert connection.call_count == 0
+
 
 def test_notify_fake_connection_dev_environment_with_force():
     hb = Honeybadger()
@@ -59,6 +61,7 @@ def test_notify_fake_connection_dev_environment_with_force():
             assert fake_connection.call_count == 0
             assert connection.call_count == 1
 
+
 def test_notify_fake_connection_non_dev_environment():
     hb = Honeybadger()
     hb.configure(api_key='aaa', environment='production')
@@ -68,6 +71,7 @@ def test_notify_fake_connection_non_dev_environment():
 
             assert fake_connection.call_count == 0
             assert connection.call_count == 1
+
 
 def test_notify_with_custom_params():
     def test_payload(request):
@@ -82,6 +86,7 @@ def test_notify_with_custom_params():
         hb.configure(api_key='aaa', force_report_data=True)
         hb.notify(error_class='Exception', error_message='Test message.', context={'foo': 'bar'})
 
+
 def test_notify_with_fingerprint():
     def test_payload(request):
         payload = json.loads(request.data.decode('utf-8'))
@@ -94,6 +99,7 @@ def test_notify_with_fingerprint():
     with mock_urlopen(test_payload) as request_mock:
         hb.configure(api_key='aaa', force_report_data=True)
         hb.notify(error_class='Exception', error_message='Test message.', fingerprint='custom_fingerprint')
+
 
 def test_notify_with_exception():
     def test_payload(request):
