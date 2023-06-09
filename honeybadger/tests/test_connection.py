@@ -8,6 +8,7 @@ from honeybadger.connection import send_notice
 from honeybadger.config import Configuration
 import uuid
 
+
 def test_connection_success():
     api_key = 'badgerbadgermushroom'
     payload = {'test': 'payload'}
@@ -20,6 +21,7 @@ def test_connection_success():
 
     with mock_urlopen(test_request) as request_mock:
         send_notice(config, payload)
+
 
 def test_connection_returns_notice_id():
     notice_id = str(uuid.uuid4())

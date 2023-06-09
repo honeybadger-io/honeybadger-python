@@ -42,7 +42,7 @@ class Honeybadger(object):
 
     def notify(self, exception=None, error_class=None, error_message=None, context={}, fingerprint=None):
         if exception and exception.__class__.__name__ in self.config.excluded_exceptions:
-            return #Terminate the function
+            return  # Terminate the function
 
         if exception is None:
             exception = {
@@ -61,7 +61,7 @@ class Honeybadger(object):
         self.auto_discover_plugins()
 
     def auto_discover_plugins(self):
-        #Avoiding circular import error
+        # Avoiding circular import error
         from honeybadger import contrib
 
         if self.config.is_aws_lambda_environment:

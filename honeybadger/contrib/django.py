@@ -46,6 +46,7 @@ class DjangoPlugin(Plugin):
     """
     Plugin for generating payload from Django requests.
     """
+
     def __init__(self):
         super(DjangoPlugin, self).__init__('Django')
 
@@ -72,7 +73,6 @@ class DjangoPlugin(Plugin):
         else:
             from django.urls import resolve
 
-
         request = current_request()
         resolver_match = request.resolver_match or resolve(request.path_info)
         request_payload = {
@@ -93,7 +93,7 @@ class DjangoPlugin(Plugin):
 
         if request.method == 'GET':
             request_payload['params'] = filter_dict(dict(request.GET), config.params_filters)
-            
+
         else:
             request_payload['params'] = filter_dict(dict(request.POST), config.params_filters)
 

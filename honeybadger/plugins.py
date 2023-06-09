@@ -12,6 +12,7 @@ class Plugin(object):
     """
     Base class for plugins. A plugin is used to add functionality related to frameworks.
     """
+
     def __init__(self, name):
         """
         Initialize plugin.
@@ -45,6 +46,7 @@ class PluginManager(object):
     """
     Manages lifecycle of plugins.
     """
+
     def __init__(self):
         self._registered = OrderedDict()
 
@@ -69,12 +71,13 @@ class PluginManager(object):
         for name, plugin in iteritems(self._registered):
             if plugin.supports(config, context):
                 logger.debug('Returning payload from plugin %s' % name)
-                
+
                 default_payload = plugin.generate_payload(default_payload, config, context)
         else:
             logger.debug('No active plugin to generate payload')
-        
+
         return default_payload
+
 
 # Global plugin manager
 default_plugin_manager = PluginManager()

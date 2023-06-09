@@ -51,10 +51,11 @@ def error_payload(exception, exc_traceback, config, fingerprint=None):
 
     # If exception has a __cause__, Recursively build the causes list.
     while hasattr(exception, '__cause__') and exception.__cause__ is not None:
-            exception = exception.__cause__
-            payload['causes'].append(prepare_exception_payload(exception))
+        exception = exception.__cause__
+        payload['causes'].append(prepare_exception_payload(exception))
 
     return payload
+
 
 def read_source(frame, source_radius=3):
     if os.path.isfile(frame[0]):
@@ -67,6 +68,7 @@ def read_source(frame, source_radius=3):
         return dict(zip(range(start, end+1), contents[start-1:end]))
 
     return {}
+
 
 def server_payload(config):
     return {
@@ -95,7 +97,7 @@ def stats_payload():
         payload = {}
 
         payload['mem'] = {
-            'total': float(s.total) / 1048576.0, # bytes -> megabytes
+            'total': float(s.total) / 1048576.0,  # bytes -> megabytes
             'free': free,
             'buffers': buffers,
             'cached': cached,
@@ -105,6 +107,7 @@ def stats_payload():
         payload['load'] = dict(zip(('one', 'five', 'fifteen'), loadavg))
 
         return payload
+
 
 def create_payload(exception, exc_traceback=None, config=None, context=None, fingerprint=None):
     # if using local_variables get them
@@ -120,11 +123,11 @@ def create_payload(exception, exc_traceback=None, config=None, context=None, fin
     if exc_traceback is None:
         exc_traceback = sys.exc_info()[2]
 
-    #if context is None, Initialize as an emptty dict
+    # if context is None, Initialize as an emptty dict
     if not context:
         context = {}
 
-    payload =  {
+    payload = {
         'notifier': {
             'name': "Honeybadger for Python",
             'url': "https://github.com/honeybadger-io/honeybadger-python",
@@ -139,4 +142,3 @@ def create_payload(exception, exc_traceback=None, config=None, context=None, fin
     }
 
     return default_plugin_manager.generate_payload(payload, config, context)
-

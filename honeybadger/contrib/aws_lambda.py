@@ -15,11 +15,13 @@ logger = logging.getLogger(__name__)
 _thread_locals = local()
 REQUEST_LOCAL_KEY = '__awslambda_current_request'
 
+
 def current_event():
     """
     Return current execution event for this thread.
     """
     return getattr(_thread_locals, REQUEST_LOCAL_KEY, None)
+
 
 def set_event(aws_event):
     """
@@ -28,12 +30,14 @@ def set_event(aws_event):
 
     setattr(_thread_locals, REQUEST_LOCAL_KEY, aws_event)
 
+
 def clear_event():
     """
     Clears execution event for this thread.
     """
     if hasattr(_thread_locals, REQUEST_LOCAL_KEY):
         setattr(_thread_locals, REQUEST_LOCAL_KEY, None)
+
 
 def reraise(tp, value, tb=None):
     """
@@ -43,7 +47,8 @@ def reraise(tp, value, tb=None):
     if value.__traceback__ is not tb:
         raise value.with_traceback(tb)
     raise value
-    
+
+
 def get_lambda_bootstrap():
     """
     Get AWS Lambda bootstrap module
@@ -57,6 +62,7 @@ def get_lambda_bootstrap():
         return sys.modules["__main__"]
     else:
         return None
+
 
 def _wrap_lambda_handler(handler):
 
@@ -72,7 +78,7 @@ def _wrap_lambda_handler(handler):
             clear_event()
             honeybadger.reset_context()
 
-            #Rerase exception to proceed with normal aws error handling
+            # Rerase exception to proceed with normal aws error handling
             reraise(*exc_info)
 
     return wrapped_handler
@@ -86,7 +92,7 @@ class AWSLambdaPlugin(Plugin):
         if not lambda_bootstrap:
             logger.warning('Lambda function not wrapped by honeybadger: Unable to locate bootstrap module.')
         self.initialize_request_handler(lambda_bootstrap)
-        
+
     def supports(self, config, context):
         return config.is_aws_lambda_environment
 
@@ -124,31 +130,31 @@ class AWSLambdaPlugin(Plugin):
             default_payload["request"]["context"]["lambda_trace_id"] = trace_id
 
         return default_payload
-        
+
     def initialize_request_handler(self, lambda_bootstrap):
         """
         Here we fetch the http & event handler from the lambda bootstrap module
         and override it with a wrapped version
         """
-        if hasattr(lambda_bootstrap, "handle_http_request"): #pre python3.7
+        if hasattr(lambda_bootstrap, "handle_http_request"):  # pre python3.7
             def event_handler(request_handler, *args, **kwargs):
                 request_handler = _wrap_lambda_handler(request_handler)
                 return original_event_handler(request_handler, *args, **kwargs)
-                    
+
             def http_handler(request_handler, *args, **kwargs):
                 request_handler = _wrap_lambda_handler(request_handler)
                 return original_http_handler(request_handler, *args, **kwargs)
 
             try:
-                #Get and replace the original handler for events with a wrapped one
+                # Get and replace the original handler for events with a wrapped one
                 original_event_handler = lambda_bootstrap.handle_event_request
                 original_http_handler = lambda_bootstrap.handle_http_request
                 lambda_bootstrap.handle_event_request = event_handler
                 lambda_bootstrap.handle_http_request = http_handler
 
-            except AttributeError as e: #Fail safely if we can't monkeypatch lambda handler
-                logger.warning('Lambda function not wrapped by honeybadger: %s' %e)
-                
+            except AttributeError as e:  # Fail safely if we can't monkeypatch lambda handler
+                logger.warning('Lambda function not wrapped by honeybadger: %s' % e)
+
         else:
             def event_handler(lambda_runtime_client, request_handler, *args, **kwargs):
                 request_handler = _wrap_lambda_handler(request_handler)
@@ -163,9 +169,4 @@ class AWSLambdaPlugin(Plugin):
             # either of these will raise an Attribute error as "handle_event_request" or "handle_event_request"
             # may not be found.
             except AttributeError as e:
-                logger.warning('Lambda function not wrapped by honeybadger: %s' %e)
-
-
-        
-        
-        
+                logger.warning('Lambda function not wrapped by honeybadger: %s' % e)

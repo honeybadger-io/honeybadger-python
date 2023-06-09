@@ -22,6 +22,7 @@ DEFAULT_IGNORED_KEYS = {
     'message',
 }
 
+
 class HoneybadgerHandler(logging.Handler):
 
     def __init__(self, api_key):
@@ -36,16 +37,15 @@ class HoneybadgerHandler(logging.Handler):
             k: v for (k, v) in record.__dict__.items()
             if k not in DEFAULT_IGNORED_KEYS
         }
-  
+
     def emit(self, record):
-        
+
         try:
             self.honeybadger.notify(
-                error_class = "%s Log" %record.levelname,
-                error_message = record.getMessage(),
-                context = self._get_context(record)
-                )
+                error_class="%s Log" % record.levelname,
+                error_message=record.getMessage(),
+                context=self._get_context(record)
+            )
 
         except Exception:
             self.handleError(record)
-        

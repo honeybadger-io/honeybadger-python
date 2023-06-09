@@ -3,6 +3,7 @@ import socket
 from six.moves import zip
 from six import iteritems
 
+
 class Configuration(object):
     DEVELOPMENT_ENVIRONMENTS = ['development', 'dev', 'test']
 
@@ -30,7 +31,7 @@ class Configuration(object):
         self.force_sync = self.is_aws_lambda_environment
         self.excluded_exceptions = []
         self.report_local_variables = False
-        
+
         self.set_12factor_config()
         self.set_config_from_dict(kwargs)
 
@@ -48,7 +49,6 @@ class Configuration(object):
                     val = bool(val)
             except:
                 pass
-
 
             setattr(self, option, val)
 
@@ -74,4 +74,4 @@ class Configuration(object):
 
         :rtype: bool
         """
-        return os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not  None
+        return os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not None

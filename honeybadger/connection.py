@@ -9,10 +9,11 @@ from .utils import StringReprJSONEncoder
 
 logger = logging.getLogger(__name__)
 
+
 def send_notice(config, payload):
     notice_id = payload.get("error", {}).get("token", None)
     request_object = request.Request(url="{}/v1/notices/".format(config.endpoint),
-                                        data=b(json.dumps(payload, cls=StringReprJSONEncoder)))
+                                     data=b(json.dumps(payload, cls=StringReprJSONEncoder)))
 
     if not config.api_key:
         logger.error("Honeybadger API key missing from configuration: cannot report errors.")
@@ -29,13 +30,11 @@ def send_notice(config, payload):
         if status != 201:
             logger.error("Received error response [{}] from Honeybadger API.".format(status))
 
-
     if config.force_sync:
         send_request()
-        
+
     else:
         t = threading.Thread(target=send_request)
         t.start()
-
 
     return notice_id

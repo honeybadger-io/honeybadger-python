@@ -5,7 +5,8 @@ adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 - Django example actually generates an alert
-- target Django v4 in CI but not with Python v3.7
+- Target Django v4 in CI but not with Python v3.7
+- Added Django v3.2 and v4.2 in version matrix for tests
 
 ## [0.15.2] - 2023-03-31
 - honeybadger.notify() now returns notice uuid (#139) 

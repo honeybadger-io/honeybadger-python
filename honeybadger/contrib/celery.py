@@ -1,6 +1,7 @@
 from honeybadger import honeybadger
 from honeybadger.plugins import Plugin, default_plugin_manager
 
+
 class CeleryPlugin(Plugin):
     def __init__(self):
         super().__init__("Celery")

@@ -9,13 +9,14 @@ from honeybadger.contrib.flask import FlaskPlugin, FlaskHoneybadger
 
 PYTHON_VERSION = sys.version_info[0:2]
 
+
 class FlaskPluginTestCase(unittest.TestCase):
     def setUp(self):
         import flask
 
         if flask.__version__.startswith('0.12') and PYTHON_VERSION < (3, 3):
             self.skipTest('Flask 0.12 requires Python > 3.2')
-        
+
         if flask.__version__.startswith('1.0') and PYTHON_VERSION < (3, 4):
             self.skipTest('Flask 1.0 requires Python > 3.3')
 
@@ -23,7 +24,7 @@ class FlaskPluginTestCase(unittest.TestCase):
             self.skipTest('Flask 1.1 requires Python > 3.4')
 
         self.config = Configuration()
-        self.default_payload = {'request':{}}
+        self.default_payload = {'request': {}}
 
         self.app = flask.Flask(__name__)
         self.app.secret_key = 'safe'
@@ -130,7 +131,7 @@ class FlaskHoneybadgerTestCase(unittest.TestCase):
 
         if flask.__version__.startswith('0.12') and PYTHON_VERSION < (3, 3):
             self.skipTest('Flask 0.12 requires Python > 3.2')
-        
+
         if flask.__version__.startswith('1.0') and PYTHON_VERSION < (3, 4):
             self.skipTest('Flask 1.0 requires Python >= 3.4')
 
@@ -140,9 +141,9 @@ class FlaskHoneybadgerTestCase(unittest.TestCase):
         import werkzeug
 
         self.default_headers = {
-           'Content-Length': '0',
-           'Host': 'localhost',
-           'User-Agent': 'werkzeug/%s' % werkzeug.__version__
+            'Content-Length': '0',
+            'Host': 'localhost',
+            'User-Agent': 'werkzeug/%s' % werkzeug.__version__
         }
         self.app = flask.Flask(__name__)
         self.app.config.update({
