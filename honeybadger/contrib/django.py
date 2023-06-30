@@ -87,6 +87,8 @@ class DjangoPlugin(Plugin):
 
         if hasattr(request, 'session'):
             request_payload['session'] = filter_dict(dict(request.session), config.params_filters)
+            if hasattr(request, 'user') and request.user.is_authenticated:
+                request_payload['session']['username'] = request.user.username
 
         if hasattr(request, 'COOKIES'):
             request_payload['cgi_data']['HTTP_COOKIE'] = filter_dict(request.COOKIES, config.params_filters)
