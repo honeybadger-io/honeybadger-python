@@ -12,7 +12,7 @@ from honeybadger.payload import (
 from honeybadger.config import Configuration
 
 from mock import patch
-from nose.tools import eq_, ok_, assert_raises
+from pytest import raises
 
 # TODO: figure out how to run Django tests?
 
@@ -37,9 +37,9 @@ def test_error_payload_project_root_replacement():
         config = Configuration(project_root=os.path.dirname(__file__))
         payload = error_payload(dict(error_class='Exception', error_message='Test'), None, config)
 
-        eq_(traceback_mock.call_count, 1)
-        ok_(payload['backtrace'][0]['file'].startswith('[PROJECT_ROOT]'))
-        eq_(payload['backtrace'][1]['file'], '/fake/path/fake_file.py')
+        assert traceback_mock.call_count == 1
+        assert payload['backtrace'][0]['file'].startswith('[PROJECT_ROOT]')
+        assert payload['backtrace'][1]['file'] == '/fake/path/fake_file.py'
 
 
 def test_error_payload_source_line_top_of_file():
@@ -47,8 +47,8 @@ def test_error_payload_source_line_top_of_file():
         config = Configuration()
         payload = error_payload(dict(error_class='Exception', error_message='Test'), None, config)
         expected = dict(zip(range(1, 5), ["Line {}\n".format(x) for x in range(1, 5)]))
-        eq_(traceback_mock.call_count, 1)
-        eq_(payload['backtrace'][0]['source'], expected)
+        assert traceback_mock.call_count == 1
+        assert payload['backtrace'][0]['source'] == expected
 
 
 def test_error_payload_source_line_bottom_of_file():
@@ -56,8 +56,8 @@ def test_error_payload_source_line_bottom_of_file():
         config = Configuration()
         payload = error_payload(dict(error_class='Exception', error_message='Test'), None, config)
         expected = dict(zip(range(7, 11), ["Line {}\n".format(x) for x in range(7, 11)]))
-        eq_(traceback_mock.call_count, 1)
-        eq_(payload['backtrace'][0]['source'], expected)
+        assert traceback_mock.call_count == 1
+        assert payload['backtrace'][0]['source'] == expected
 
 
 def test_error_payload_source_line_midfile():
@@ -65,8 +65,8 @@ def test_error_payload_source_line_midfile():
         config = Configuration()
         payload = error_payload(dict(error_class='Exception', error_message='Test'), None, config)
         expected = dict(zip(range(2, 9), ["Line {}\n".format(x) for x in range(2, 9)]))
-        eq_(traceback_mock.call_count, 1)
-        eq_(payload['backtrace'][0]['source'], expected)
+        assert traceback_mock.call_count == 1
+        assert payload['backtrace'][0]['source'] == expected
 
 
 @patch('os.path.isfile', return_value=False)
@@ -75,7 +75,7 @@ def test_error_payload_source_missing_file(_isfile):
         config = Configuration()
         payload = error_payload(
             dict(error_class='Exception', error_message='Test'), None, config)
-        eq_(payload['backtrace'][0]['source'], {})
+        assert payload['backtrace'][0]['source'] == {}
 
 
 def test_payload_captures_exception_cause():
@@ -85,7 +85,7 @@ def test_payload_captures_exception_cause():
         exception.__cause__ = Exception('Exception cause')
 
         payload = error_payload(exc_traceback=None, exception=exception,  config=config)
-        eq_(len(payload['causes']), 1)
+        assert len(payload['causes']) == 1
 
 
 def test_error_payload_with_nested_exception():
@@ -96,38 +96,38 @@ def test_error_payload_with_nested_exception():
         exception_cause.__cause__ = Exception('Nested')
         exception.__cause__ = exception_cause
         payload = error_payload(exc_traceback=None, exception=exception,  config=config)
-        eq_(len(payload['causes']), 2)
+        assert len(payload['causes']) == 2
 
 
 def test_error_payload_with_fingerprint():
     config = Configuration()
     exception = Exception('Test')
     payload = error_payload(exception, exc_traceback=None, config=config, fingerprint='a fingerprint')
-    eq_(payload['fingerprint'], 'a fingerprint')
+    assert payload['fingerprint'] == 'a fingerprint'
 
 
 def test_error_payload_with_fingerprint_as_type():
     config = Configuration()
     exception = Exception('Test')
     payload = error_payload(exception, exc_traceback=None, config=config, fingerprint={'a': 1, 'b': 2})
-    eq_(payload['fingerprint'], "{'a': 1, 'b': 2}")
+    assert payload['fingerprint'] == "{'a': 1, 'b': 2}"
 
 
 def test_error_payload_without_fingerprint():
     config = Configuration()
     exception = Exception('Test')
     payload = error_payload(exception, exc_traceback=None, config=config)
-    eq_(payload.get('fingerprint'), None)
+    assert payload.get('fingerprint') == None
 
 
 def test_server_payload():
     config = Configuration(project_root=os.path.dirname(__file__), environment='test', hostname='test.local')
     payload = server_payload(config)
 
-    eq_(payload['project_root'], os.path.dirname(__file__))
-    eq_(payload['environment_name'], 'test')
-    eq_(payload['hostname'], 'test.local')
-    eq_(payload['pid'], os.getpid())
+    assert payload['project_root'] == os.path.dirname(__file__)
+    assert payload['environment_name'] == 'test'
+    assert payload['hostname'] == 'test.local'
+    assert payload['pid'] == os.getpid()
     assert type(payload['stats']['mem']['total']) == float
     assert type(payload['stats']['mem']['free']) == float
 
@@ -137,20 +137,20 @@ def test_psutil_is_optional():
 
     with patch.dict(sys.modules, {'psutil': None}):
         payload = server_payload(config)
-        eq_(payload['stats'], {})
+        assert payload['stats'] == {}
 
 
 def test_create_payload_without_local_variables():
     config = Configuration()
     exception = Exception('Test')
     payload = create_payload(exception, config=config)
-    eq_(payload['request'].get('local_variables'), None)
+    assert payload['request'].get('local_variables') == None
 
 
 def test_create_payload_with_local_variables():
     config = Configuration(report_local_variables=True)
-    with assert_raises(Exception):
+    with raises(Exception):
         test_local_variable = {"test": "var"}
         exception = Exception('Test')
         payload = create_payload(exception, config=config)
-        eq_(payload['request']['local_variables'], test_local_variable)
+        assert payload['request']['local_variables'] == test_local_variable

@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=46", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# [tool.tox]
+# tox_pip_extensions_ext_pip_custom_platform = true
+
+# TODO: require setuptools>=61 then delete setup.cfg
+# and translate all metadata & options into here
+# https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html
+# [project]
+# name = "honeybadger"
+# dynamic = ["version", "readme"]
+
+# [tool.setuptools.dynamic.version]
+# attr = "honeybadger.VERSION"
+# [tool.setuptools.dynamic.readme]
+# file = ["README.md", "CHANGELOG.md"]
+
+# # and on...

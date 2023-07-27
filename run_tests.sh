@@ -4,8 +4,8 @@
 cd /app
 python --version
 pip --version
-pip install psutil six
+pip install psutil six tox
 [ ! -z "$DJANGO_VERSION" ] && pip install Django==$DJANGO_VERSION
 [ ! -z "$FLASK_VERSION" ] && pip install Flask==$FLASK_VERSION
-python setup.py develop
-python setup.py test
+pip install --editable .
+tox run -- -v

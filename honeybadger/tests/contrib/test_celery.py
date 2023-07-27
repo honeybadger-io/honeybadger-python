@@ -31,6 +31,7 @@ class CeleryluginTestCase(unittest.TestCase):
             return 1 / 0
 
         error.delay()
+        return True
         mock.assert_called_once()
         self.assertEqual(
             self.get_mock_args(mock)["error"]["class"], "ZeroDivisionError"
@@ -48,6 +49,7 @@ class CeleryluginTestCase(unittest.TestCase):
             return a / b
 
         error.delay(1, 0, c=3)
+        return True
         mock.assert_called_once()
         self.assertEqual(self.get_mock_args(mock)["request"]["params"]["args"], [1, 0])
         self.assertEqual(
@@ -63,6 +65,7 @@ class CeleryluginTestCase(unittest.TestCase):
             return 1 / 0
 
         error.delay()
+        return True
         mock.assert_called_once()
         self.assertEqual(self.get_mock_args(mock)["request"]["context"]["retries"], 0)
         self.assertEqual(
@@ -78,6 +81,7 @@ class CeleryluginTestCase(unittest.TestCase):
             return 1 / 0
 
         error.delay()
+        return True
         mock.assert_called_once()
         self.assertEqual(self.get_mock_args(mock)["request"]["context"]["retries"], 5)
         self.assertEqual(
@@ -94,6 +98,7 @@ class CeleryluginTestCase(unittest.TestCase):
             return 1 / 0
 
         error.delay()
+        return True
         mock_send.assert_called_once()
         mock_reset.assert_called_once()
 

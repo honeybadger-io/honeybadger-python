@@ -44,8 +44,8 @@ jobs:
 
       - name: Build for python 3
         run: |
-          pip install --upgrade twine wheel
-          python setup.py bdist_wheel
+          pip install --upgrade twine wheel build
+          pyproject-build --wheel
           ls dist
 
       - name: Upload
