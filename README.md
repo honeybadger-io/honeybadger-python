@@ -439,13 +439,13 @@ honeybadger.notify(error_class='ValueError', error_message='Something bad happen
 After cloning the repo, run:
 
 ```sh
-python setup.py develop
+make develop
 ```
 
 To run the unit tests:
 
 ```sh
-python setup.py test
+make test
 ```
 
 ## Contributing
