@@ -138,7 +138,7 @@ class FlaskHoneybadger(object):
         """
         from flask import signals
 
-        if not signals.signals_available:
+        if hasattr(signals, 'signals_available') and not signals.signals_available:
             self.app.logger.warn('blinker needs to be installed in order to support %s'.format(description))
         self.app.logger.info('Enabling {}'.format(description))
         # Weak references won't work if handlers are methods rather than functions.

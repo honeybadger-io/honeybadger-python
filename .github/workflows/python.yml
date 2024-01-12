@@ -21,9 +21,12 @@ jobs:
           - DJANGO_VERSION=4.2.1
           - FLASK_VERSION=1.0.4
           - FLASK_VERSION=1.1.1
+          - FLASK_VERSION=3.0.0
         exclude:
           - python-version: '3.7'
             env: DJANGO_VERSION=4.2.1
+          - python-version: '3.7'
+            env: FLASK_VERSION=3.0.0
 
     steps:
 
