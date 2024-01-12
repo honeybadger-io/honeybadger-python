@@ -5,6 +5,8 @@ adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.18.0] - 2024-01-12
+
 ## [0.17.0] - 2023-07-27
 - Django: Automatically capture user id and user name when available
 
