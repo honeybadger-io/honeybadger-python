@@ -5,6 +5,8 @@ adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.19.0] - 2024-01-13
+
 ## [0.18.0] - 2024-01-12
 - AWS Lambda: Support for Python 3.9+
 
