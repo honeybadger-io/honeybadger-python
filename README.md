@@ -436,11 +436,23 @@ honeybadger.notify(error_class='ValueError', error_message='Something bad happen
 
 ## Development
 
+### Python environment setup
+
+A simple way to setup a python environment is to use [asdf](https://asdf-vm.com/#/). After installing `asdf`, run the following commands:
+1. `asdf install python 3.9.16`
+2. `asdf local python 3.9.16`
+
+### Installing dependencies
+
+```sh
 After cloning the repo, run:
 
 ```sh
+pip install wheel
 python setup.py develop
 ```
+
+### Unit tests
 
 To run the unit tests:
 
@@ -469,6 +481,7 @@ See https://github.com/honeybadger-io/honeybadger-python/blob/master/CHANGELOG.m
 ### Github Workflow
 
 A new version can be published on PyPi using the [Publish new version on PyPi](.github/workflows/pypi-publish.yml) workflow.
+Before triggering the workflow, ensure that upcoming version changes in [CHANGELOG.md](./CHANGELOG.md) are recorded in the `Unreleased` section. 
 The workflow can be triggered manually from the Github Actions page and takes a version input.
 
 ### Manual Release 
