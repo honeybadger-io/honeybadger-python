@@ -52,14 +52,23 @@ def reraise(tp, value, tb=None):
 def get_lambda_bootstrap():
     """
     Get AWS Lambda bootstrap module
-    """
 
+    First, we check for the presence of the bootstrap module in sys.modules.
+    If it's not there, we check for the presence of __main__.
+    In 3.8, the bootstrap module is imported as __main__.
+    In 3.9, the bootstrap module is imported as __main__.awslambdaricmain.
+    In some other cases, the bootstrap module is imported as __main__.bootstrap.
+    """
     if "bootstrap" in sys.modules:
         return sys.modules["bootstrap"]
     elif "__main__" in sys.modules:
-        if hasattr(sys.modules["__main__"], "bootstrap"):
-            return sys.modules["__main__"].bootstrap
-        return sys.modules["__main__"]
+        module = sys.modules["__main__"]
+        if hasattr(module, "awslambdaricmain") and hasattr(module.awslambdaricmain, "bootstrap"):
+            return module.awslambdaricmain.bootstrap
+        elif hasattr(module, "bootstrap"):
+            return module.bootstrap
+
+        return module
     else:
         return None
 
