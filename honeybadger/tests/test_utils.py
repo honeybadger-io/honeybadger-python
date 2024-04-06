@@ -13,3 +13,9 @@ def test_filter_dict_with_nested_dict():
     expected = {'foo': 'bar', 'bar': 'baz', 'nested': {'password': '[FILTERED]'}}
     filter_keys = ['password']
     assert filter_dict(data, filter_keys) == expected
+
+def test_ignores_dict_with_tuple_key():
+    data = {('foo', 'bar'): 'baz', "key": "value"}
+    expected = {"key": "value"}
+    filter_keys = ['foo']
+    assert filter_dict(data, filter_keys) == expected
