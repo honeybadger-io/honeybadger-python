@@ -5,6 +5,9 @@ adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.19.1] - 2024-04-07
+- Fix: Ignore tuple keys when JSON-encoding dictionaries
+
 ## [0.19.0] - 2024-01-13
 - AWS Lambda: Support for Python 3.9+
 
