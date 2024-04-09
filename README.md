@@ -194,7 +194,21 @@ Consuming the request body in an ASGI application's middleware is [problematic a
 
 FastAPI allows overriding the logic used by the `Request` and `APIRoute` classes, by [using custom `APIRoute` classes](https://fastapi.tiangolo.com/advanced/custom-request-and-route/). This gives more control over the request body, and makes it possible to send request body data along with honeybadger notifications.
 
-A custom API Route is available at [`honeybadger.contrib.fastapi`](./honeybadger/contrib/fastapi):
+A custom API Route is available at [`honeybadger.contrib.fastapi`](./honeybadger/contrib/fastapi).
+
+Here's an example of setting the router class:
+
+```python
+from fastapi import FastAPI
+from honeybadger import honeybadger
+from honeybadger.contrib.fastapi import HoneybadgerRoute
+
+honeybadger.configure(api_key="{{PROJECT_API_KEY}}")
+app = FastAPI()
+app.router.route_class = HoneybadgerRoute
+```
+
+Here's an example of creating a new `APIRouter` instance:
 
 ```python
 from fastapi import FastAPI, APIRouter
@@ -203,10 +217,8 @@ from honeybadger.contrib.fastapi import HoneybadgerRoute
 
 honeybadger.configure(api_key="{{PROJECT_API_KEY}}")
 app = FastAPI()
-app.router.route_class = HoneybadgerRoute
-
 router = APIRouter(route_class=HoneybadgerRoute)
-
+app.router = router
 ```
 
 ### Starlette
