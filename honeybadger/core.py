@@ -67,7 +67,7 @@ class Honeybadger(object):
     def event(self, event_type=None, data=None, **kwargs):
         """
         Send an event to Honeybadger
-        Events logged with this method will appear in honeybadger insights.
+        Events logged with this method will appear in Honeybadger Insights.
         """
         # If the first argument is a string, treat it as event_type
         if isinstance(event_type, str):
