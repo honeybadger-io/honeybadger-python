@@ -4,6 +4,8 @@ CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+
+## [0.20.0] - 2024-06-01
 - Feat: honeybadger.event() for sending events to Honeybadger Insights 
 
 ## [0.19.1] - 2024-04-07
