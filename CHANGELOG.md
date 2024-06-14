@@ -4,6 +4,8 @@ CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+
+## [0.20.1] - 2024-06-14
 - Fix: Resolve "can't pickle '_io.TextIOWrapper' object" error (#173)
 
 ## [0.20.0] - 2024-06-01
