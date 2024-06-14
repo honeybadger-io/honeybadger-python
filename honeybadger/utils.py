@@ -1,4 +1,3 @@
-import copy
 import json
 
 
@@ -15,16 +14,7 @@ def filter_dict(data, filter_keys):
     if type(data) != dict:
         return data
 
-    data_copy = copy.deepcopy(data)
-
-    for key, value in data_copy.items():
-        # While tuples are considered valid dictionary keys,
-        # they are not json serializable
-        # so we remove them from the dictionary
-        if type(key) == tuple:
-            data.pop(key)
-            continue
-
+    for key, value in data.items():
         if key in filter_keys:
             data[key] = "[FILTERED]"
 
