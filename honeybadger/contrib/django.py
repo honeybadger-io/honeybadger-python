@@ -116,7 +116,6 @@ class DjangoHoneybadgerMiddleware(object):
     def __call__(self, request):
         set_request(request)
         honeybadger.begin_request(request)
-        self.__set_user_from_context(request)
 
         response = self.get_response(request)
 
@@ -126,6 +125,7 @@ class DjangoHoneybadgerMiddleware(object):
         return response
 
     def process_exception(self, request, exception):
+        self.__set_user_from_context(request)
         honeybadger.notify(exception)
         clear_request()
         return None
