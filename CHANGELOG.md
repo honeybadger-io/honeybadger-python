@@ -4,6 +4,7 @@ CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+- Django: Fix for automatically capturing user id and user name when available
 
 ## [0.20.1] - 2024-06-14
 - Fix: Resolve "can't pickle '_io.TextIOWrapper' object" error (#173)
