@@ -1,5 +1,7 @@
 from __future__ import absolute_import
+
 import re
+import sys
 
 from six import iteritems
 
@@ -106,14 +108,26 @@ class DjangoHoneybadgerMiddleware(object):
     def __init__(self, get_response=None):
         self.get_response = get_response
         from django.conf import settings
-        if getattr(settings, 'DEBUG'):
-            honeybadger.configure(environment='development')
-        config_kwargs = dict([(k.lower(), v) for (k, v) in iteritems(getattr(settings, 'HONEYBADGER', {}))])
+
+        if self.__should_ignore_shell_errors():
+            return
+
+        if getattr(settings, "DEBUG"):
+            honeybadger.configure(environment="development")
+        config_kwargs = dict(
+            [
+                (k.lower(), v)
+                for (k, v) in iteritems(getattr(settings, "HONEYBADGER", {}))
+            ]
+        )
         honeybadger.configure(**config_kwargs)
         honeybadger.config.set_12factor_config()  # environment should override Django settings
         default_plugin_manager.register(DjangoPlugin())
 
     def __call__(self, request):
+        if self.__should_ignore_shell_errors():
+            return self.get_response(request)
+
         set_request(request)
         honeybadger.begin_request(request)
 
@@ -125,6 +139,9 @@ class DjangoHoneybadgerMiddleware(object):
         return response
 
     def process_exception(self, request, exception):
+        if self.__should_ignore_shell_errors():
+            return None
+
         self.__set_user_from_context(request)
         honeybadger.notify(exception)
         clear_request()
@@ -132,9 +149,25 @@ class DjangoHoneybadgerMiddleware(object):
 
     def __set_user_from_context(self, request):
         # in Django 1 request.user.is_authenticated is a function, in Django 2+ it's a boolean
-        if hasattr(request, 'user') and (
-                (isinstance(request.user.is_authenticated, bool) and request.user.is_authenticated)
-                or (callable(request.user.is_authenticated) and request.user.is_authenticated())
+        if hasattr(request, "user") and (
+            (
+                isinstance(request.user.is_authenticated, bool)
+                and request.user.is_authenticated
+            )
+            or (
+                callable(request.user.is_authenticated)
+                and request.user.is_authenticated()
+            )
         ):
             honeybadger.set_context(username=request.user.get_username())
             honeybadger.set_context(user_id=request.user.id)
+
+    def __should_ignore_shell_errors(self):
+        from django.conf import settings
+
+        is_shell = len(sys.argv) > 1 and sys.argv[1] == "shell"
+
+        return (
+            getattr(settings, "HONEYBADGER", {}).get("IGNORE_SHELL_ERRORS", False)
+            and is_shell
+        )
