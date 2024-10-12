@@ -109,9 +109,6 @@ class DjangoHoneybadgerMiddleware(object):
         self.get_response = get_response
         from django.conf import settings
 
-        if self.__should_ignore_shell_errors():
-            return
-
         if getattr(settings, "DEBUG"):
             honeybadger.configure(environment="development")
         config_kwargs = dict(
@@ -125,9 +122,6 @@ class DjangoHoneybadgerMiddleware(object):
         default_plugin_manager.register(DjangoPlugin())
 
     def __call__(self, request):
-        if self.__should_ignore_shell_errors():
-            return self.get_response(request)
-
         set_request(request)
         honeybadger.begin_request(request)
 
@@ -168,6 +162,6 @@ class DjangoHoneybadgerMiddleware(object):
         is_shell = len(sys.argv) > 1 and sys.argv[1] in ["shell", "shell_plus"]
 
         return (
-            getattr(settings, "HONEYBADGER", {}).get("IGNORE_SHELL_ERRORS", False)
+            getattr(settings, "HONEYBADGER", {}).get("ignore_shell_errors", False)
             and is_shell
         )
