@@ -165,7 +165,7 @@ class DjangoHoneybadgerMiddleware(object):
     def __should_ignore_shell_errors(self):
         from django.conf import settings
 
-        is_shell = len(sys.argv) > 1 and sys.argv[1] == "shell"
+        is_shell = len(sys.argv) > 1 and sys.argv[1] in ["shell", "shell_plus"]
 
         return (
             getattr(settings, "HONEYBADGER", {}).get("IGNORE_SHELL_ERRORS", False)
