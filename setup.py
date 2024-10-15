@@ -5,7 +5,7 @@ from codecs import open
 from setuptools import setup
 
 tests_require = ['nose', 'mock', 'testfixtures', 'blinker', 'async-asgi-testclient',
-                 'aiounittest', 'fastapi', 'httpx', 'celery==5.2.*', 'importlib-metadata==4.8.3']
+                 'aiounittest', 'fastapi', 'httpx', 'celery==5.2.*', 'importlib-metadata==8.5.0']
 
 if sys.version_info[0:2] >= (3, 5):
     tests_require.append('Flask>=1.0')
