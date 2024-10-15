@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
         env:
           - DJANGO_VERSION=4.2.16
           - DJANGO_VERSION=5.0.9
@@ -21,6 +21,17 @@ jobs:
           - FLASK_VERSION=1.1.4
           - FLASK_VERSION=2.3.3
           - FLASK_VERSION=3.0.3
+        exclude:
+          - python-version: '3.8'
+            env: DJANGO_VERSION=5.0.9
+          - python-version: '3.9'
+            env: DJANGO_VERSION=5.0.9
+          - python-version: '3.13'
+            env: DJANGO_VERSION=5.0.9
+          - python-version: '3.8'
+            env: DJANGO_VERSION=5.1.2
+          - python-version: '3.9'
+            env: DJANGO_VERSION=5.1.2
 
     steps:
 
