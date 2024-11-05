@@ -439,7 +439,7 @@ You can also pass it a:
 mydict = dict(a=1)
 try:
   print mydict['b']
-except KeyError, exc:
+except KeyError as exc:
   honeybadger.notify(exc, context={'foo': 'bar'})
 
 # with custom arguments
