@@ -4,7 +4,7 @@ import logging
 
 from honeybadger import honeybadger
 from honeybadger.plugins import Plugin, default_plugin_manager
-from honeybadger.utils import filter_dict
+from honeybadger.utils import filter_dict, filter_env_vars
 from six import iteritems
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ class FlaskPlugin(Plugin):
             'action': _request.endpoint,
             'params': {},
             'session': filter_dict(dict(session), config.params_filters),
-            'cgi_data': filter_dict(cgi_data, config.params_filters),
+            'cgi_data': filter_dict(filter_env_vars(cgi_data), config.params_filters),
             'context': context
         }
 

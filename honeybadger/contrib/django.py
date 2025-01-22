@@ -5,7 +5,7 @@ from six import iteritems
 
 from honeybadger import honeybadger
 from honeybadger.plugins import Plugin, default_plugin_manager
-from honeybadger.utils import filter_dict
+from honeybadger.utils import filter_dict, filter_env_vars
 
 try:
     from threading import local
@@ -81,7 +81,7 @@ class DjangoPlugin(Plugin):
             'action': resolver_match.func.__name__,
             'params': {},
             'session': {},
-            'cgi_data': filter_dict(request.META, config.params_filters),
+            'cgi_data': filter_dict(filter_env_vars(request.META), config.params_filters, is_env_data=True),
             'context': context
         }
 
