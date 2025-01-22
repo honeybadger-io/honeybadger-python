@@ -1,4 +1,4 @@
-from honeybadger.utils import filter_dict, filter_env_vars, CGI_WHITELIST
+from honeybadger.utils import filter_dict, filter_env_vars
 
 
 def test_filter_dict():
@@ -33,7 +33,7 @@ def test_filter_env_vars_with_http_prefix():
     }
     assert filter_env_vars(data) == expected
 
-def test_filter_env_vars_with_cgi_whitelist():
+def test_filter_env_vars_with_cgi_allowlist():
     data = {
         'CONTENT_LENGTH': '256',
         'REMOTE_ADDR': '127.0.0.1',
