@@ -81,7 +81,7 @@ class DjangoPlugin(Plugin):
             'action': resolver_match.func.__name__,
             'params': {},
             'session': {},
-            'cgi_data': filter_dict(filter_env_vars(request.META), config.params_filters, is_env_data=True),
+            'cgi_data': filter_dict(filter_env_vars(request.META), config.params_filters),
             'context': context
         }
 
