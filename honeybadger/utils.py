@@ -34,7 +34,8 @@ def filter_env_vars(data):
 
     filtered_data = {}
     for key, value in data.items():
-        if key.startswith('HTTP_') or key in CGI_ALLOWLIST:
+        normalized_key = key.upper().replace("-", "_") # Either CONTENT_TYPE or Content-Type is valid
+        if normalized_key.startswith('HTTP_') or normalized_key in CGI_ALLOWLIST:
             filtered_data[key] = value
     return filtered_data
 
