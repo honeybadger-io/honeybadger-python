@@ -4,6 +4,7 @@ CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+- Fix: Only send a restricted set of environment variables
 
 ## [0.20.2] - 2024-08-04
 - Django: Fix for automatically capturing user id and user name when available
