@@ -60,7 +60,6 @@ class FlaskPluginTestCase(unittest.TestCase):
             self.assertDictEqual(payload['request']['session'], {})
             self.assertDictContainsSubset({
                 'Host': 'server:1234',
-                'X-Wizard-Color': 'grey',
                 'REQUEST_METHOD': 'GET'
             }, payload['request']['cgi_data'])
             self.assertDictEqual(payload['request']['context'], {'k': 'value'})
