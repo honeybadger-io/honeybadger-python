@@ -4,6 +4,8 @@ CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+
+## [0.20.3] - 2025-01-23
 - Fix: Only send a restricted set of environment variables
 
 ## [0.20.2] - 2024-08-04
