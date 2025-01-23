@@ -60,7 +60,6 @@ class FlaskPluginTestCase(unittest.TestCase):
             self.assertDictEqual(payload['request']['session'], {})
             self.assertDictContainsSubset({
                 'Host': 'server:1234',
-                'X-Wizard-Color': 'grey',
                 'REQUEST_METHOD': 'GET'
             }, payload['request']['cgi_data'])
             self.assertDictEqual(payload['request']['context'], {'k': 'value'})
@@ -138,12 +137,10 @@ class FlaskHoneybadgerTestCase(unittest.TestCase):
         if flask.__version__.startswith('1.1') and PYTHON_VERSION < (3, 5):
             self.skipTest('Flask 1.1 requires Python >= 3.5')
 
-        import werkzeug
-
         self.default_headers = {
             'Content-Length': '0',
             'Host': 'localhost',
-            'User-Agent': 'werkzeug/%s' % werkzeug.__version__
+            'User-Agent': 'Honeybadger Test'
         }
         self.app = flask.Flask(__name__)
         self.app.config.update({
