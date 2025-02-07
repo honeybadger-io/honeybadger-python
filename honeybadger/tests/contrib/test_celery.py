@@ -107,3 +107,26 @@ class CeleryluginTestCase(unittest.TestCase):
 
         error.delay()
         mock.assert_not_called()
+
+    @patch("honeybadger.connection.send_notice")
+    def test_context_merging(self, mock):
+        """Test that custom context is merged with task context rather than being replaced"""
+        self.celery_hb = CeleryHoneybadger(self.app, report_exceptions=True)
+
+        @self.app.task
+        def error():
+            with honeybadger.context(user_id=123, custom_data="test"):
+                return 1 / 0
+
+        error.delay()
+        mock.assert_called_once()
+
+        # Verify task context is present
+        context = self.get_mock_args(mock)["request"]["context"]
+        self.assertIn("task_id", context)
+        self.assertIn("retries", context)
+        self.assertIn("max_retries", context)
+
+        # Verify custom context is also present
+        self.assertEqual(context["user_id"], 123)
+        self.assertEqual(context["custom_data"], "test")

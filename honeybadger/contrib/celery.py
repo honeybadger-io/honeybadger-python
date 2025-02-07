@@ -26,6 +26,12 @@ class CeleryPlugin(Plugin):
         """
         from celery import current_task
 
+        context.update(
+            task_id=current_task.request.id,
+            retries=current_task.request.retries,
+            max_retries=current_task.max_retries,
+        )
+
         payload = {
             "component": current_task.__module__,
             "action": current_task.name,
@@ -33,11 +39,7 @@ class CeleryPlugin(Plugin):
                 "args": list(current_task.request.args),
                 "kwargs": current_task.request.kwargs,
             },
-            "context": {
-                "task_id": current_task.request.id,
-                "retries": current_task.request.retries,
-                "max_retries": current_task.max_retries,
-            },
+            "context": context,
         }
         default_payload["request"].update(payload)
         return default_payload
