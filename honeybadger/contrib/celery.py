@@ -26,6 +26,10 @@ class CeleryPlugin(Plugin):
         """
         from celery import current_task
 
+        # Ensure we have a mutable context dictionary
+        context = dict(context or {})
+        
+        # Add Celery task information to context
         context.update(
             task_id=current_task.request.id,
             retries=current_task.request.retries,

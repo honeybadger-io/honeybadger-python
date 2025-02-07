@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import patch
 from celery import Celery
+from honeybadger import honeybadger
 from honeybadger.contrib.celery import CeleryHoneybadger
 
 
