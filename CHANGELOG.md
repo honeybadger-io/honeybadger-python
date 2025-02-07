@@ -4,6 +4,7 @@ CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+- Fix: Merge (rather than replace) context from Celery task into report data (#189)
 
 ## [0.20.3] - 2025-01-23
 - Fix: Only send a restricted set of environment variables
@@ -15,7 +16,7 @@ adheres to [Semantic Versioning](http://semver.org/).
 - Fix: Resolve "can't pickle '_io.TextIOWrapper' object" error (#173)
 
 ## [0.20.0] - 2024-06-01
-- Feat: honeybadger.event() for sending events to Honeybadger Insights 
+- Feat: honeybadger.event() for sending events to Honeybadger Insights
 
 ## [0.19.1] - 2024-04-07
 
@@ -37,7 +38,7 @@ adheres to [Semantic Versioning](http://semver.org/).
 - Added Django v3.2 and v4.2 in version matrix for tests
 
 ## [0.15.2] - 2023-03-31
-- honeybadger.notify() now returns notice uuid (#139) 
+- honeybadger.notify() now returns notice uuid (#139)
 
 ## [0.15.1] - 2023-02-15
 
