@@ -16,7 +16,7 @@ if sys.version_info[0:2] >= (3, 5):
 if sys.version_info[0:2] <= (3, 5):
     tests_require.append('Django>=1.11,<=2.2')
 else:
-    tests_require.append('Django>3.0,<4.0')
+    tests_require.append('Django>3.0,<6.0')
 
 # Ugly fix for testfixtures on Python 3.2
 if sys.version_info[0:2] == (3, 2):
