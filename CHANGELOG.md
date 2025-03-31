@@ -5,6 +5,7 @@ adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 - Fix: `event_type` is not a required key for honeybadger.event()
+- Docs: Update README to include honeybadger.event() usage
 
 ## [0.21] - 2025-02-11
 - Fix: Merge (rather than replace) context from Celery task into report data (#189)
