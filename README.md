@@ -454,22 +454,34 @@ Use this method to send custom events to [Honeybadger Insights](https://docs.hon
 
 ```python
 # Send a simple event
-honeybadger.event('user.signup', {'email': 'user@example.com'})
+honeybadger.event('user.signup', dict(email='user@example.com'))
+# or using keyword arguments
+honeybadger.event(event_type='user.signup', data=dict(email='user@example.com'))
 
 # Send an event with additional metadata
 honeybadger.event(
-    'order.completed',
-    {
-        'order_id': '123',
-        'total': 49.99,
-        'items': ['item1', 'item2']
-    }
+    event_type='order.completed',
+    data=dict(
+        order_id='123',
+        total=49.99,
+        items=['item1', 'item2']
+    )
 )
-```
+# or
+honeybadger.event(
+    dict(
+        event_type='order.completed',
+        order_id='123',
+        total=49.99,
+        items=['item1', 'item2']
+    )
+)
 
 The `event` method takes two parameters:
-- `name`: A string identifying the event (required)
-- `payload`: A dictionary containing any additional data about the event (optional)
+- `event_type`: A string identifying the event type
+- `data`: A dictionary containing any additional data about the event
+
+`event_type` is not required, but it's recommended as a way to group your events . A `ts` key is also added to `data` if not present with the value `time.time()`.
 
 ## Development
 
