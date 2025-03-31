@@ -476,12 +476,13 @@ honeybadger.event(
         items=['item1', 'item2']
     )
 )
+```
 
 The `event` method takes two parameters:
 - `event_type`: A string identifying the event type
 - `data`: A dictionary containing any additional data about the event
 
-`event_type` is not required, but it's recommended as a way to group your events . A `ts` key is also added to `data` if not present with the value `time.time()`.
+`event_type` is not required, but it's recommended as a way to group your events. A `ts` key is also added to `data` if not present with the value `time.time()`.
 
 ## Development
 
