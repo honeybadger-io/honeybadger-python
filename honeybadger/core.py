@@ -26,7 +26,7 @@ class Honeybadger(object):
             return fake_connection.send_notice(self.config, payload)
         else:
             return connection.send_notice(self.config, payload)
-        
+
     def _send_event(self, payload):
         if self.config.is_dev() and not self.config.force_report_data:
             return fake_connection.send_event(self.config, payload)
@@ -62,11 +62,10 @@ class Honeybadger(object):
             merged_context.update(context)
 
         return self._send_notice(exception, context=merged_context, fingerprint=fingerprint)
-    
-    
+
     def event(self, event_type=None, data=None, **kwargs):
         """
-        Send an event to Honeybadger
+        Send an event to Honeybadger.
         Events logged with this method will appear in Honeybadger Insights.
         """
         # If the first argument is a string, treat it as event_type
@@ -80,10 +79,6 @@ class Honeybadger(object):
         # Raise an error if event_type is not provided correctly
         else:
             raise ValueError("The first argument must be either a string or a dictionary")
-
-        # Ensure 'event_type' is in payload
-        if 'event_type' not in payload:
-            raise ValueError("An event_type must be provided")
 
         # Add a timestamp to the payload if not provided
         if 'ts' not in payload:
