@@ -259,7 +259,7 @@ app.conf.update(
 )
 CeleryHoneybadger(app, report_exceptions=True)
 ```
-  
+
 ### Other frameworks / plain Python app
 
 Django and Flask are the only explicitly supported frameworks at the moment. For other frameworks (tornado, web2py, etc.) or a plain Python script, simply import honeybadger and configure it with your API key. Honeybadger uses a global exception hook to automatically report any uncaught exceptions.
@@ -374,7 +374,7 @@ The following options are available to you:
 | force_sync             | `bool` | `False`                                                | `True`                                | `HONEYBADGER_FORCE_SYNC`             |
 | report_local_variables | `bool` | `False`                                                | `True`                                | `HONEYBADGER_REPORT_LOCAL_VARIABLES` |
 
-[^1]: Honeybadger will try to infer the correct environment when possible. For example, in the case of the Django integration, if Django settings are set to `DEBUG = True`, the environment will default to `development`.  
+[^1]: Honeybadger will try to infer the correct environment when possible. For example, in the case of the Django integration, if Django settings are set to `DEBUG = True`, the environment will default to `development`.
 
 ## Public Methods
 
@@ -446,6 +446,44 @@ except KeyError as exc:
 honeybadger.notify(error_class='ValueError', error_message='Something bad happened!', fingerprint='custom_fingerprint')
 ```
 
+### `honeybadger.event`: Send custom events to Honeybadger Insights
+
+Use this method to send custom events to [Honeybadger Insights](https://docs.honeybadger.io/guides/insights/). This allows you to track and monitor important events in your application.
+
+#### Examples:
+
+```python
+# Send a simple event
+honeybadger.event('user.signup', dict(email='user@example.com'))
+# or using keyword arguments
+honeybadger.event(event_type='user.signup', data=dict(email='user@example.com'))
+
+# Send an event with additional metadata
+honeybadger.event(
+    event_type='order.completed',
+    data=dict(
+        order_id='123',
+        total=49.99,
+        items=['item1', 'item2']
+    )
+)
+# or
+honeybadger.event(
+    dict(
+        event_type='order.completed',
+        order_id='123',
+        total=49.99,
+        items=['item1', 'item2']
+    )
+)
+```
+
+The `event` method takes two parameters:
+- `event_type`: A string identifying the event type
+- `data`: A dictionary containing any additional data about the event
+
+`event_type` is not required, but it's recommended as a way to group your events. A `ts` key is also added to `data` if not present with the value `time.time()`.
+
 ## Development
 
 ### Python environment setup
@@ -493,10 +531,10 @@ See https://github.com/honeybadger-io/honeybadger-python/blob/master/CHANGELOG.m
 ### Github Workflow
 
 A new version can be published on PyPi using the [Publish new version on PyPi](.github/workflows/pypi-publish.yml) workflow.
-Before triggering the workflow, ensure that upcoming version changes in [CHANGELOG.md](./CHANGELOG.md) are recorded in the `Unreleased` section. 
+Before triggering the workflow, ensure that upcoming version changes in [CHANGELOG.md](./CHANGELOG.md) are recorded in the `Unreleased` section.
 The workflow can be triggered manually from the Github Actions page and takes a version input.
 
-### Manual Release 
+### Manual Release
 
 1. Ensure the latest version of twine is installed with `pip install --upgrade twine wheel`
 1. Update the version in [honeybadger/version.py](./honeybadger/version.py)
