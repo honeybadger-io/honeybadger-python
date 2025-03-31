@@ -142,3 +142,41 @@ def test_notify_context_merging():
         hb.configure(api_key='aaa', force_report_data=True)
         hb.set_context(foo='bar')
         hb.notify(error_class='Exception', error_message='Test.', context=dict(bar='foo'))
+
+def test_event_with_two_params():
+    def test_payload(request):
+        payload = json.loads(request.data.decode('utf-8'))
+        assert 'ts' in payload
+        eq_(payload['event_type'], 'order.completed')
+        eq_(payload['email'], 'user@example.com')
+
+    hb = Honeybadger()
+
+    with mock_urlopen(test_payload) as request_mock:
+        hb.configure(api_key='aaa', force_report_data=True)
+        hb.event(event_type='order.completed', data=dict(email='user@example.com'))
+
+def test_event_with_one_param():
+    def test_payload(request):
+        payload = json.loads(request.data.decode('utf-8'))
+        assert 'ts' in payload
+        eq_(payload['event_type'], 'order.completed')
+        eq_(payload['email'], 'user@example.com')
+
+    hb = Honeybadger()
+
+    with mock_urlopen(test_payload) as request_mock:
+        hb.configure(api_key='aaa', force_report_data=True)
+        hb.event(dict(event_type='order.completed', email='user@example.com'))
+
+def test_event_without_event_type():
+    def test_payload(request):
+        payload = json.loads(request.data.decode('utf-8'))
+        assert 'ts' in payload
+        eq_(payload['email'], 'user@example.com')
+
+    hb = Honeybadger()
+
+    with mock_urlopen(test_payload) as request_mock:
+        hb.configure(api_key='aaa', force_report_data=True)
+        hb.event(dict(email='user@example.com'))

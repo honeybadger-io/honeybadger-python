@@ -7,6 +7,9 @@ from setuptools import setup
 tests_require = ['nose', 'mock', 'testfixtures', 'blinker', 'async-asgi-testclient',
                  'aiounittest', 'fastapi', 'httpx', 'celery==5.2.*', 'importlib-metadata==4.8.3']
 
+if sys.version_info[0:2] >= (3, 8):
+    tests_require.append('typing-extensions==4.12.2')
+
 if sys.version_info[0:2] >= (3, 5):
     tests_require.append('Flask>=1.0')
     # For some reason, Flask 1.1.1 is pulling in Jinja2 3.0.0 which causes syntax errors.
