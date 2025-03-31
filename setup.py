@@ -15,7 +15,6 @@ if sys.version_info[0:2] >= (3, 5):
 
 if sys.version_info[0:2] <= (3, 5):
     tests_require.append('Django>=1.11,<=2.2')
-    tests_require.append('typing-extensions==4.12.2')
 else:
     tests_require.append('Django>3.0,<4.0')
 

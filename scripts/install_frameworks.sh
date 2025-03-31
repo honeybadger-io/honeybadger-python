@@ -1,6 +1,9 @@
 #!/bin/sh
 set -ev
 
+# kombu pins typing-extensions to 4.12.2
+pip install typing-extensions==4.12.2
+
 [ ! -z "$DJANGO_VERSION" ] && pip install Django==$DJANGO_VERSION
 
 # for Flask v1 - lock to specific versions that are supported by Flask v1
