@@ -4,6 +4,8 @@ CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+
+## [0.22.0] - 2025-03-31
 - Fix: `event_type` is not a required key for honeybadger.event()
 - Docs: Update README to include honeybadger.event() usage
 
