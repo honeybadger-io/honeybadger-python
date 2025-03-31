@@ -4,6 +4,7 @@ CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+- Fix: `event_type` is not a required key for honeybadger.event()
 
 ## [0.21] - 2025-02-11
 - Fix: Merge (rather than replace) context from Celery task into report data (#189)
