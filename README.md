@@ -498,8 +498,7 @@ A simple way to setup a python environment is to use [asdf](https://asdf-vm.com/
 After cloning the repo, run:
 
 ```sh
-pip install wheel
-python setup.py develop
+pip install -r dev-requirements.txt
 ```
 
 ### Unit tests
@@ -507,7 +506,7 @@ python setup.py develop
 To run the unit tests:
 
 ```sh
-python setup.py test
+python -m pytest
 ```
 
 ## Contributing

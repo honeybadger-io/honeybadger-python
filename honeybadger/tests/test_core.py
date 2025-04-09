@@ -1,8 +1,7 @@
 import json
 import threading
 
-from nose.tools import eq_, ok_
-from nose.tools import raises
+import pytest
 
 from .utils import mock_urlopen
 from honeybadger import Honeybadger
@@ -12,17 +11,17 @@ from mock import MagicMock, patch
 def test_set_context():
     honeybadger = Honeybadger()
     honeybadger.set_context(foo='bar')
-    eq_(honeybadger.thread_local.context, dict(foo='bar'))
+    assert honeybadger.thread_local.context == dict(foo='bar')
     honeybadger.set_context(bar='foo')
-    eq_(honeybadger.thread_local.context, dict(foo='bar', bar='foo'))
+    assert honeybadger.thread_local.context == dict(foo='bar', bar='foo')
 
 
 def test_set_context_with_dict():
     honeybadger = Honeybadger()
     honeybadger.set_context(dict(foo='bar'))
-    eq_(honeybadger.thread_local.context, dict(foo='bar'))
+    assert honeybadger.thread_local.context == dict(foo='bar')
     honeybadger.set_context(dict(foo='bar', bar='foo'))
-    eq_(honeybadger.thread_local.context, dict(foo='bar', bar='foo'))
+    assert honeybadger.thread_local.context == dict(foo='bar', bar='foo')
 
 
 def test_threading():
@@ -79,9 +78,9 @@ def test_notify_fake_connection_non_dev_environment():
 def test_notify_with_custom_params():
     def test_payload(request):
         payload = json.loads(request.data.decode('utf-8'))
-        eq_(payload['request']['context'], dict(foo='bar'))
-        eq_(payload['error']['class'], 'Exception')
-        eq_(payload['error']['message'], 'Test message.')
+        assert payload['request']['context'] == dict(foo='bar')
+        assert payload['error']['class'] == 'Exception'
+        assert payload['error']['message'] == 'Test message.'
 
     hb = Honeybadger()
 
@@ -93,9 +92,9 @@ def test_notify_with_custom_params():
 def test_notify_with_fingerprint():
     def test_payload(request):
         payload = json.loads(request.data.decode('utf-8'))
-        eq_(payload['error']['class'], 'Exception')
-        eq_(payload['error']['fingerprint'], 'custom_fingerprint')
-        eq_(payload['error']['message'], 'Test message.')
+        assert payload['error']['class'] == 'Exception'
+        assert payload['error']['fingerprint'] == 'custom_fingerprint'
+        assert payload['error']['message'] == 'Test message.'
 
     hb = Honeybadger()
 
@@ -107,8 +106,8 @@ def test_notify_with_fingerprint():
 def test_notify_with_exception():
     def test_payload(request):
         payload = json.loads(request.data.decode('utf-8'))
-        eq_(payload['error']['class'], 'ValueError')
-        eq_(payload['error']['message'], 'Test value error.')
+        assert payload['error']['class'] == 'ValueError'
+        assert payload['error']['message'] == 'Test value error.'
 
     hb = Honeybadger()
 
@@ -120,8 +119,8 @@ def test_notify_with_exception():
 def test_notify_with_excluded_exception():
     def test_payload(request):
         payload = json.loads(request.data.decode('utf-8'))
-        eq_(payload['error']['class'], 'AttributeError')
-        eq_(payload['error']['message'], 'Test attribute error.')
+        assert payload['error']['class'] == 'AttributeError'
+        assert payload['error']['message'] == 'Test attribute error.'
 
     hb = Honeybadger()
 
@@ -134,7 +133,7 @@ def test_notify_with_excluded_exception():
 def test_notify_context_merging():
     def test_payload(request):
         payload = json.loads(request.data.decode('utf-8'))
-        eq_(payload['request']['context'], dict(foo='bar', bar='foo'))
+        assert payload['request']['context'] == dict(foo='bar', bar='foo')
 
     hb = Honeybadger()
 
@@ -147,8 +146,8 @@ def test_event_with_two_params():
     def test_payload(request):
         payload = json.loads(request.data.decode('utf-8'))
         assert 'ts' in payload
-        eq_(payload['event_type'], 'order.completed')
-        eq_(payload['email'], 'user@example.com')
+        assert payload['event_type'] == 'order.completed'
+        assert payload['email'] == 'user@example.com'
 
     hb = Honeybadger()
 
@@ -160,8 +159,8 @@ def test_event_with_one_param():
     def test_payload(request):
         payload = json.loads(request.data.decode('utf-8'))
         assert 'ts' in payload
-        eq_(payload['event_type'], 'order.completed')
-        eq_(payload['email'], 'user@example.com')
+        assert payload['event_type'] == 'order.completed'
+        assert payload['email'] == 'user@example.com'
 
     hb = Honeybadger()
 
@@ -173,7 +172,7 @@ def test_event_without_event_type():
     def test_payload(request):
         payload = json.loads(request.data.decode('utf-8'))
         assert 'ts' in payload
-        eq_(payload['email'], 'user@example.com')
+        assert payload['email'] == 'user@example.com'
 
     hb = Honeybadger()
 
