@@ -1,0 +1,21 @@
+aiounittest
+async-asgi-testclient
+blinker
+celery
+django
+fastapi
+flask
+httpx
+importlib-metadata
+jinja2
+markupsafe
+mock
+psutil
+pytest
+pytest-cov
+six
+testfixtures
+typing-extensions
+
+# For Python 3.10+ which removed cgi module
+legacy-cgi==2.6.3

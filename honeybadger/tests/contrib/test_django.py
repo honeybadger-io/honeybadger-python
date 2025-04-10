@@ -1,10 +1,11 @@
 import unittest
 import json
+import importlib
 from mock import patch
 from mock import Mock
 import sys
 
-from django.conf.urls import url
+from django.urls import re_path
 from django.conf import settings
 from django.test import RequestFactory
 from django.test import SimpleTestCase
@@ -43,7 +44,7 @@ def versions_match():
     }
 
     for django_version, supported in VERSION_MATRIX.items():
-        if django.__version__.startswith(django_version) and supported:
+        if importlib.metadata.version("django").startswith(django_version) and supported:
             return True
     return False
 
@@ -53,7 +54,7 @@ class DjangoPluginTestCase(unittest.TestCase):
         self.plugin = DjangoPlugin()
         self.rf = RequestFactory()
         self.config = Configuration()
-        self.url = url(r'test', plain_view, name='test_view')
+        self.url = re_path(r'test', plain_view, name='test_view')
         self.default_payload = {'request': {}}
 
     def tearDown(self):
@@ -107,7 +108,7 @@ class DjangoPluginTestCase(unittest.TestCase):
 class DjangoMiddlewareTestCase(unittest.TestCase):
     def setUp(self):
         self.rf = RequestFactory()
-        self.url = url(r'test', plain_view, name='test_view')
+        self.url = re_path(r'test', plain_view, name='test_view')
 
     def tearDown(self):
         clear_request()
@@ -155,7 +156,8 @@ class DjangoMiddlewareIntegrationTestCase(SimpleTestCase):
     @unittest.skipUnless(versions_match(), "Current Python version unsupported by current version of Django")
     @override_settings(
         HONEYBADGER={
-            'API_KEY': 'abc123'
+            'API_KEY': 'abc123',
+            'FORCE_REPORT_DATA': True  # Force reporting in test environment
         }
     )
     def test_exceptions_handled_by_middleware(self):
@@ -180,6 +182,7 @@ class DjangoMiddlewareIntegrationTestCase(SimpleTestCase):
                     'honeybadger.tests.contrib.django_test_app.middleware.CustomMiddleware'],
         HONEYBADGER={
             'API_KEY': 'abc123',
+            'FORCE_REPORT_DATA': True  # Force reporting in test environment
         }
     )
     def test_exceptions_handled_by_middleware_with_custom_middleware(self):

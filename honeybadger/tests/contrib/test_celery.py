@@ -5,7 +5,7 @@ from honeybadger import honeybadger
 from honeybadger.contrib.celery import CeleryHoneybadger
 
 
-class CeleryluginTestCase(unittest.TestCase):
+class CeleryPluginTestCase(unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.app = Celery(__name__)
@@ -13,6 +13,7 @@ class CeleryluginTestCase(unittest.TestCase):
             CELERY_ALWAYS_EAGER=True,
             HONEYBADGER_API_KEY="test",
             HONEYBADGER_ENVIRONMENT="celery_test",
+            HONEYBADGER_FORCE_REPORT_DATA=True,
         )
         self.celery_hb = None
 
@@ -21,7 +22,8 @@ class CeleryluginTestCase(unittest.TestCase):
 
     def tearDown(self):
         super().tearDown()
-        self.celery_hb.tearDowm()
+        if self.celery_hb:
+            self.celery_hb.tearDown()
 
     @patch("honeybadger.connection.send_notice")
     def test_celery_task_with_exception(self, mock):

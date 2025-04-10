@@ -91,11 +91,12 @@ class CeleryHoneybadger(object):
         honeybadger_config = {
             "api_key": api_key,
             "environment": config.get("HONEYBADGER_ENVIRONMENT", "development"),
+            "force_report_data": config.get("HONEYBADGER_FORCE_REPORT_DATA", False),
         }
         honeybadger.configure(**honeybadger_config)
         honeybadger.config.set_12factor_config()  # environment should override celery settings
 
-    def tearDowm(self):
+    def tearDown(self):
         """
         Disconnects celery signals.
         """
@@ -104,3 +105,10 @@ class CeleryHoneybadger(object):
         task_postrun.disconnect(self._on_task_postrun)
         if self.report_exceptions:
             task_failure.disconnect(self._on_task_failure)
+
+    # Keep the misspelled method for backward compatibility
+    def tearDowm(self):
+        """
+        Disconnects celery signals. (backward compatibility method)
+        """
+        self.tearDown()

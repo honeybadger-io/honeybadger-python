@@ -1,4 +1,5 @@
 import unittest
+import importlib
 
 import sys
 from mock import patch
@@ -14,13 +15,13 @@ class FlaskPluginTestCase(unittest.TestCase):
     def setUp(self):
         import flask
 
-        if flask.__version__.startswith('0.12') and PYTHON_VERSION < (3, 3):
+        if importlib.metadata.version("flask").startswith('0.12') and PYTHON_VERSION < (3, 3):
             self.skipTest('Flask 0.12 requires Python > 3.2')
 
-        if flask.__version__.startswith('1.0') and PYTHON_VERSION < (3, 4):
+        if importlib.metadata.version("flask").startswith('1.0') and PYTHON_VERSION < (3, 4):
             self.skipTest('Flask 1.0 requires Python > 3.3')
 
-        if flask.__version__.startswith('1.1') and PYTHON_VERSION < (3, 5):
+        if importlib.metadata.version("flask").startswith('1.1') and PYTHON_VERSION < (3, 5):
             self.skipTest('Flask 1.1 requires Python > 3.4')
 
         self.config = Configuration()
@@ -58,10 +59,10 @@ class FlaskPluginTestCase(unittest.TestCase):
             self.assertEqual(payload['request']['action'], 'foo')
             self.assertDictEqual(payload['request']['params'], {'a': ['1', '2'], 'foo': ['bar']})
             self.assertDictEqual(payload['request']['session'], {})
-            self.assertDictContainsSubset({
+            self.assertEqual(payload['request']['cgi_data'], {**payload['request']['cgi_data'], **{
                 'Host': 'server:1234',
                 'REQUEST_METHOD': 'GET'
-            }, payload['request']['cgi_data'])
+            }})
             self.assertDictEqual(payload['request']['context'], {'k': 'value'})
 
     def test_get_request_with_session(self):
@@ -76,10 +77,10 @@ class FlaskPluginTestCase(unittest.TestCase):
             self.assertEqual(payload['request']['action'], 'foo')
             self.assertDictEqual(payload['request']['params'], {})
             self.assertDictEqual(payload['request']['session'], {'answer': 42, 'password': '[FILTERED]'})
-            self.assertDictContainsSubset({
+            self.assertEqual(payload['request']['cgi_data'], {**payload['request']['cgi_data'], **{
                 'Host': 'server:1234',
                 'REQUEST_METHOD': 'GET'
-            }, payload['request']['cgi_data'])
+            }})
             self.assertDictEqual(payload['request']['context'], {'k': 'value'})
 
     def test_post_request(self):
@@ -128,13 +129,13 @@ class FlaskHoneybadgerTestCase(unittest.TestCase):
     def setUp(self):
         import flask
 
-        if flask.__version__.startswith('0.12') and PYTHON_VERSION < (3, 3):
+        if importlib.metadata.version("flask").startswith('0.12') and PYTHON_VERSION < (3, 3):
             self.skipTest('Flask 0.12 requires Python > 3.2')
 
-        if flask.__version__.startswith('1.0') and PYTHON_VERSION < (3, 4):
+        if importlib.metadata.version("flask").startswith('1.0') and PYTHON_VERSION < (3, 4):
             self.skipTest('Flask 1.0 requires Python >= 3.4')
 
-        if flask.__version__.startswith('1.1') and PYTHON_VERSION < (3, 5):
+        if importlib.metadata.version("flask").startswith('1.1') and PYTHON_VERSION < (3, 5):
             self.skipTest('Flask 1.1 requires Python >= 3.5')
 
         self.default_headers = {
