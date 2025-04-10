@@ -30,6 +30,12 @@ jobs:
             env: DJANGO_VERSION=5.1.8
           - python-version: '3.8'
             env: DJANGO_VERSION=5.2
+          - python-version: '3.9'
+            env: DJANGO_VERSION=5.0.14
+          - python-version: '3.9'
+            env: DJANGO_VERSION=5.1.8
+          - python-version: '3.9'
+            env: DJANGO_VERSION=5.2
           - python-version: '3.8'
             env: FLASK_VERSION=3.1.0
 
