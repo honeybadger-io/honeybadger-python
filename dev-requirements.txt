@@ -11,8 +11,8 @@ jinja2
 markupsafe
 mock
 psutil
-pytest-cov
 pytest
+pytest-cov
 six
 testfixtures
 typing-extensions
