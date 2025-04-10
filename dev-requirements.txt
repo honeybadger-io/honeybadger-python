@@ -2,9 +2,7 @@ aiounittest
 async-asgi-testclient
 blinker
 celery
-django
 fastapi
-flask
 httpx
 importlib-metadata
 jinja2
