@@ -494,7 +494,6 @@ A simple way to setup a python environment is to use [asdf](https://asdf-vm.com/
 
 ### Installing dependencies
 
-```sh
 After cloning the repo, run:
 
 ```sh
