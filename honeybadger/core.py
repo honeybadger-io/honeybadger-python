@@ -11,7 +11,7 @@ import honeybadger.fake_connection as fake_connection
 from .payload import create_payload
 from .config import Configuration
 
-logging.getLogger('honeybadger').addHandler(logging.NullHandler())
+logging.getLogger("honeybadger").addHandler(logging.NullHandler())
 
 
 class Honeybadger(object):
@@ -20,8 +20,16 @@ class Honeybadger(object):
         self.thread_local = threading.local()
         self.thread_local.context = {}
 
-    def _send_notice(self, exception, exc_traceback=None, context=None, fingerprint=None):
-        payload = create_payload(exception, exc_traceback, config=self.config, context=context, fingerprint=fingerprint)
+    def _send_notice(
+        self, exception, exc_traceback=None, context=None, fingerprint=None
+    ):
+        payload = create_payload(
+            exception,
+            exc_traceback,
+            config=self.config,
+            context=context,
+            fingerprint=fingerprint,
+        )
         if self.config.is_dev() and not self.config.force_report_data:
             return fake_connection.send_notice(self.config, payload)
         else:
@@ -34,7 +42,7 @@ class Honeybadger(object):
             return connection.send_event(self.config, payload)
 
     def _get_context(self):
-        return getattr(self.thread_local, 'context', {})
+        return getattr(self.thread_local, "context", {})
 
     def begin_request(self, request):
         self.thread_local.context = self._get_context()
@@ -47,21 +55,30 @@ class Honeybadger(object):
         self._send_notice(value, exc_traceback, context=self._get_context())
         self.existing_except_hook(type, value, exc_traceback)
 
-    def notify(self, exception=None, error_class=None, error_message=None, context={}, fingerprint=None):
-        if exception and exception.__class__.__name__ in self.config.excluded_exceptions:
+    def notify(
+        self,
+        exception=None,
+        error_class=None,
+        error_message=None,
+        context={},
+        fingerprint=None,
+    ):
+        if (
+            exception
+            and exception.__class__.__name__ in self.config.excluded_exceptions
+        ):
             return  # Terminate the function
 
         if exception is None:
-            exception = {
-                'error_class': error_class,
-                'error_message': error_message
-            }
+            exception = {"error_class": error_class, "error_message": error_message}
 
         merged_context = self._get_context()
         if context:
             merged_context.update(context)
 
-        return self._send_notice(exception, context=merged_context, fingerprint=fingerprint)
+        return self._send_notice(
+            exception, context=merged_context, fingerprint=fingerprint
+        )
 
     def event(self, event_type=None, data=None, **kwargs):
         """
@@ -71,21 +88,22 @@ class Honeybadger(object):
         # If the first argument is a string, treat it as event_type
         if isinstance(event_type, str):
             payload = data.copy() if data else {}
-            payload['event_type'] = event_type
+            payload["event_type"] = event_type
         # If the first argument is a dictionary, merge it with kwargs
         elif isinstance(event_type, dict):
             payload = event_type.copy()
             payload.update(kwargs)
         # Raise an error if event_type is not provided correctly
         else:
-            raise ValueError("The first argument must be either a string or a dictionary")
+            raise ValueError(
+                "The first argument must be either a string or a dictionary"
+            )
 
         # Add a timestamp to the payload if not provided
-        if 'ts' not in payload:
-            payload['ts'] = time.time()
+        if "ts" not in payload:
+            payload["ts"] = time.time()
 
         return self._send_event(payload)
-
 
     def configure(self, **kwargs):
         self.config.set_config_from_dict(kwargs)
