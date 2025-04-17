@@ -6,10 +6,10 @@ from honeybadger.contrib.asgi import ASGIHoneybadger
 from honeybadger.contrib.celery import CeleryHoneybadger
 
 __all__ = [
-    'FlaskHoneybadger',
-    'DjangoHoneybadgerMiddleware',
-    'AWSLambdaPlugin',
-    'HoneybadgerHandler'
-    'ASGIHoneybadger',
-    'CeleryHoneybadger',
+    "FlaskHoneybadger",
+    "DjangoHoneybadgerMiddleware",
+    "AWSLambdaPlugin",
+    "HoneybadgerHandler",
+    "ASGIHoneybadger",
+    "CeleryHoneybadger",
 ]

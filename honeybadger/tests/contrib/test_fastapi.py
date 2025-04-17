@@ -32,4 +32,6 @@ class FastAPITestCase(unittest.TestCase):
         response = self.client.get("/ko")
         self.assertEqual(response.status_code, 500)
         hb.notify.assert_called_once()
-        self.assertEqual(type(hb.notify.call_args.kwargs["exception"]), ZeroDivisionError)
+        self.assertEqual(
+            type(hb.notify.call_args.kwargs["exception"]), ZeroDivisionError
+        )

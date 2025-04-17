@@ -26,4 +26,5 @@ class HoneybadgerRoute(APIRoute):
                 raise exc from None
             finally:
                 honeybadger.reset_context()
+
         return custom_route_handler
