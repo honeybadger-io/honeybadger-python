@@ -28,4 +28,4 @@ jobs:
 
       - name: Run Black
         run: |
-          pylint -E ./honeybadger
+          black --check --diff ./honeybadger
