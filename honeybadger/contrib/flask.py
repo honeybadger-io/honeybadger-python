@@ -16,7 +16,7 @@ class FlaskPlugin(Plugin):
     """
 
     def __init__(self):
-        super(FlaskPlugin, self).__init__('Flask')
+        super(FlaskPlugin, self).__init__("Flask")
 
     def supports(self, config, context):
         """
@@ -42,35 +42,35 @@ class FlaskPlugin(Plugin):
         from flask import current_app, session, request as _request
 
         current_view = current_app.view_functions[_request.endpoint]
-        if hasattr(current_view, 'view_class'):
-            component = '.'.join((current_view.__module__, current_view.view_class.__name__))
+        if hasattr(current_view, "view_class"):
+            component = ".".join(
+                (current_view.__module__, current_view.view_class.__name__)
+            )
         else:
             component = current_view.__module__
-        cgi_data = {
-            k: v
-            for k, v in iteritems(_request.headers)
-        }
-        cgi_data.update({
-            'REQUEST_METHOD': _request.method,
-            'HTTP_COOKIE': dict(_request.cookies)
-        })
+        cgi_data = {k: v for k, v in iteritems(_request.headers)}
+        cgi_data.update(
+            {"REQUEST_METHOD": _request.method, "HTTP_COOKIE": dict(_request.cookies)}
+        )
         payload = {
-            'url': _request.base_url,
-            'component': component,
-            'action': _request.endpoint,
-            'params': {},
-            'session': filter_dict(dict(session), config.params_filters),
-            'cgi_data': filter_dict(filter_env_vars(cgi_data), config.params_filters),
-            'context': context
+            "url": _request.base_url,
+            "component": component,
+            "action": _request.endpoint,
+            "params": {},
+            "session": filter_dict(dict(session), config.params_filters),
+            "cgi_data": filter_dict(filter_env_vars(cgi_data), config.params_filters),
+            "context": context,
         }
 
         # Add query params
         params = filter_dict(_request.args.to_dict(flat=False), config.params_filters)
-        params.update(filter_dict(_request.form.to_dict(flat=False), config.params_filters))
+        params.update(
+            filter_dict(_request.form.to_dict(flat=False), config.params_filters)
+        )
 
-        payload['params'] = params
+        payload["params"] = params
 
-        default_payload['request'].update(payload)
+        default_payload["request"].update(payload)
 
         return default_payload
 
@@ -79,9 +79,12 @@ class FlaskHoneybadger(object):
     """
     Flask extension for Honeybadger. Initializes Honeybadger and adds a request information to payload.
     """
-    CONFIG_PREFIX = 'HONEYBADGER_'
 
-    def __init__(self, app=None, report_exceptions=False, reset_context_after_request=False):
+    CONFIG_PREFIX = "HONEYBADGER_"
+
+    def __init__(
+        self, app=None, report_exceptions=False, reset_context_after_request=False
+    ):
         """
         Initialize Honeybadger.
         :param flask.Application app: the application to wrap for the exception.
@@ -94,9 +97,11 @@ class FlaskHoneybadger(object):
         self.reset_context_after_request = False
         default_plugin_manager.register(FlaskPlugin())
         if app is not None:
-            self.init_app(app,
-                          report_exceptions=report_exceptions,
-                          reset_context_after_request=reset_context_after_request)
+            self.init_app(
+                app,
+                report_exceptions=report_exceptions,
+                reset_context_after_request=reset_context_after_request,
+            )
 
     def init_app(self, app, report_exceptions=False, reset_context_after_request=False):
         """
@@ -110,7 +115,7 @@ class FlaskHoneybadger(object):
 
         self.app = app
 
-        self.app.logger.info('Initializing Honeybadger')
+        self.app.logger.info("Initializing Honeybadger")
 
         self.report_exceptions = report_exceptions
         self.reset_context_after_request = reset_context_after_request
@@ -118,16 +123,20 @@ class FlaskHoneybadger(object):
 
         # Add hooks
         if self.report_exceptions:
-            self._register_signal_handler('auto-reporting exceptions',
-                                          got_request_exception,
-                                          self._handle_exception)
+            self._register_signal_handler(
+                "auto-reporting exceptions",
+                got_request_exception,
+                self._handle_exception,
+            )
 
         if self.reset_context_after_request:
-            self._register_signal_handler('auto clear context on request end',
-                                          request_tearing_down,
-                                          self._reset_context)
+            self._register_signal_handler(
+                "auto clear context on request end",
+                request_tearing_down,
+                self._reset_context,
+            )
 
-        logger.info('Honeybadger helper installed')
+        logger.info("Honeybadger helper installed")
 
     def _register_signal_handler(self, description, signal, handler):
         """
@@ -138,9 +147,14 @@ class FlaskHoneybadger(object):
         """
         from flask import signals
 
-        if hasattr(signals, 'signals_available') and not signals.signals_available:
-            self.app.logger.warn('blinker needs to be installed in order to support %s'.format(description))
-        self.app.logger.info('Enabling {}'.format(description))
+        # pylint: disable-next=no-member
+        if hasattr(signals, "signals_available") and not signals.signals_available:
+            self.app.logger.warn(
+                "blinker needs to be installed in order to support %s".format(
+                    description
+                )
+            )
+        self.app.logger.info("Enabling {}".format(description))
         # Weak references won't work if handlers are methods rather than functions.
         signal.connect(handler, sender=self.app, weak=False)
 
@@ -149,13 +163,13 @@ class FlaskHoneybadger(object):
         Initializes honeybadger using the given config object.
         :param dict config: a dict or dict-like object that contains honeybadger configuration properties.
         """
-        if config.get('DEBUG', False):
-            honeybadger.configure(environment='development')
+        if config.get("DEBUG", False):
+            honeybadger.configure(environment="development")
 
         honeybadger_config = {}
         for key, value in iteritems(config):
             if key.startswith(self.CONFIG_PREFIX):
-                honeybadger_config[key[len(self.CONFIG_PREFIX):].lower()] = value
+                honeybadger_config[key[len(self.CONFIG_PREFIX) :].lower()] = value
 
         honeybadger.configure(**honeybadger_config)
         honeybadger.config.set_12factor_config()  # environment should override Flask settings

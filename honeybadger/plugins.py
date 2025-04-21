@@ -56,10 +56,10 @@ class PluginManager(object):
         :param plugin: the plugin to register.
         """
         if plugin.name not in self._registered:
-            logger.info('Registering plugin %s' % plugin.name)
+            logger.info("Registering plugin %s" % plugin.name)
             self._registered[plugin.name] = plugin
         else:
-            logger.warning('Plugin %s already registered' % plugin.name)
+            logger.warning("Plugin %s already registered" % plugin.name)
 
     def generate_payload(self, default_payload, config=None, context=None):
         """
@@ -70,11 +70,13 @@ class PluginManager(object):
         """
         for name, plugin in iteritems(self._registered):
             if plugin.supports(config, context):
-                logger.debug('Returning payload from plugin %s' % name)
+                logger.debug("Returning payload from plugin %s" % name)
 
-                default_payload = plugin.generate_payload(default_payload, config, context)
+                default_payload = plugin.generate_payload(
+                    default_payload, config, context
+                )
         else:
-            logger.debug('No active plugin to generate payload')
+            logger.debug("No active plugin to generate payload")
 
         return default_payload
 

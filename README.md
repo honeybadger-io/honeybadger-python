@@ -508,6 +508,20 @@ To run the unit tests:
 python -m pytest
 ```
 
+### Linting
+
+To ensure code consistency, run `black` to autoformat your code:
+
+```sh
+black ./honeybadger
+```
+
+Then run `pylint` to check for any linting errors:
+
+```sh
+pylint -E ./honeybadger
+```
+
 ## Contributing
 
 If you're adding a new feature, please [submit an issue](https://github.com/honeybadger-io/honeybadger-python/issues/new) as a preliminary step; that way you can be (moderately) sure that your pull request will be accepted.
@@ -516,6 +530,9 @@ If you're adding a new feature, please [submit an issue](https://github.com/hone
 
 1. Fork it.
 1. Create a topic branch `git checkout -b my_branch`
+1. Ensure the tests pass `python -m pytest`
+1. Run black for consistency `black ./honeybadger`
+1. Run pylint for linting `pylint -E ./honeybadger`
 1. Commit your changes `git commit -am "Boom"`
 1. Push to your branch `git push origin my_branch`
 1. Send a [pull request](https://github.com/honeybadger-io/honeybadger-python/pulls)

@@ -4,11 +4,7 @@ from contextlib import contextmanager
 import os
 import sys
 
-from honeybadger.payload import (
-    create_payload,
-    error_payload,
-    server_payload
-)
+from honeybadger.payload import create_payload, error_payload, server_payload
 from honeybadger.config import Configuration
 
 from mock import patch
@@ -18,15 +14,23 @@ import pytest
 
 
 @contextmanager
-def mock_traceback(method='traceback.extract_stack', line_no=5):
+def mock_traceback(method="traceback.extract_stack", line_no=5):
     with patch(method) as traceback_mock:
         path = os.path.dirname(__file__)
         tb_data = []
         for i in range(1, 3):
-            tb_data.append((os.path.join(path, 'file_{}.py'.format(i)), line_no*i, 'method_{}'.format(i)))
+            tb_data.append(
+                (
+                    os.path.join(path, "file_{}.py".format(i)),
+                    line_no * i,
+                    "method_{}".format(i),
+                )
+            )
 
-            tb_data.append(('/fake/path/fake_file.py', 15, 'fake_method'))
-            tb_data.append((os.path.join(path, 'payload_fixture.txt'), line_no, 'fixture_method'))
+            tb_data.append(("/fake/path/fake_file.py", 15, "fake_method"))
+            tb_data.append(
+                (os.path.join(path, "payload_fixture.txt"), line_no, "fixture_method")
+            )
 
         traceback_mock.return_value = tb_data
         yield traceback_mock
@@ -35,122 +39,141 @@ def mock_traceback(method='traceback.extract_stack', line_no=5):
 def test_error_payload_project_root_replacement():
     with mock_traceback() as traceback_mock:
         config = Configuration(project_root=os.path.dirname(__file__))
-        payload = error_payload(dict(error_class='Exception', error_message='Test'), None, config)
+        payload = error_payload(
+            dict(error_class="Exception", error_message="Test"), None, config
+        )
 
         assert traceback_mock.call_count == 1
-        assert payload['backtrace'][0]['file'].startswith('[PROJECT_ROOT]')
-        assert payload['backtrace'][1]['file'] == '/fake/path/fake_file.py'
+        assert payload["backtrace"][0]["file"].startswith("[PROJECT_ROOT]")
+        assert payload["backtrace"][1]["file"] == "/fake/path/fake_file.py"
 
 
 def test_error_payload_source_line_top_of_file():
     with mock_traceback(line_no=1) as traceback_mock:
         config = Configuration()
-        payload = error_payload(dict(error_class='Exception', error_message='Test'), None, config)
+        payload = error_payload(
+            dict(error_class="Exception", error_message="Test"), None, config
+        )
         expected = dict(zip(range(1, 5), ["Line {}\n".format(x) for x in range(1, 5)]))
         assert traceback_mock.call_count == 1
-        assert payload['backtrace'][0]['source'] == expected
+        assert payload["backtrace"][0]["source"] == expected
 
 
 def test_error_payload_source_line_bottom_of_file():
     with mock_traceback(line_no=10) as traceback_mock:
         config = Configuration()
-        payload = error_payload(dict(error_class='Exception', error_message='Test'), None, config)
-        expected = dict(zip(range(7, 11), ["Line {}\n".format(x) for x in range(7, 11)]))
+        payload = error_payload(
+            dict(error_class="Exception", error_message="Test"), None, config
+        )
+        expected = dict(
+            zip(range(7, 11), ["Line {}\n".format(x) for x in range(7, 11)])
+        )
         assert traceback_mock.call_count == 1
-        assert payload['backtrace'][0]['source'] == expected
+        assert payload["backtrace"][0]["source"] == expected
 
 
 def test_error_payload_source_line_midfile():
     with mock_traceback(line_no=5) as traceback_mock:
         config = Configuration()
-        payload = error_payload(dict(error_class='Exception', error_message='Test'), None, config)
+        payload = error_payload(
+            dict(error_class="Exception", error_message="Test"), None, config
+        )
         expected = dict(zip(range(2, 9), ["Line {}\n".format(x) for x in range(2, 9)]))
         assert traceback_mock.call_count == 1
-        assert payload['backtrace'][0]['source'] == expected
+        assert payload["backtrace"][0]["source"] == expected
 
 
-@patch('os.path.isfile', return_value=False)
+@patch("os.path.isfile", return_value=False)
 def test_error_payload_source_missing_file(_isfile):
     with mock_traceback(line_no=5) as traceback_mock:
         config = Configuration()
         payload = error_payload(
-            dict(error_class='Exception', error_message='Test'), None, config)
-        assert payload['backtrace'][0]['source'] == {}
+            dict(error_class="Exception", error_message="Test"), None, config
+        )
+        assert payload["backtrace"][0]["source"] == {}
 
 
 def test_payload_captures_exception_cause():
     with mock_traceback() as traceback_mock:
         config = Configuration()
-        exception = Exception('Test')
-        exception.__cause__ = Exception('Exception cause')
+        exception = Exception("Test")
+        exception.__cause__ = Exception("Exception cause")
 
-        payload = error_payload(exc_traceback=None, exception=exception,  config=config)
-        assert len(payload['causes']) == 1
+        payload = error_payload(exc_traceback=None, exception=exception, config=config)
+        assert len(payload["causes"]) == 1
 
 
 def test_error_payload_with_nested_exception():
     with mock_traceback() as traceback_mock:
         config = Configuration()
-        exception = Exception('Test')
-        exception_cause = Exception('Exception cause')
-        exception_cause.__cause__ = Exception('Nested')
+        exception = Exception("Test")
+        exception_cause = Exception("Exception cause")
+        exception_cause.__cause__ = Exception("Nested")
         exception.__cause__ = exception_cause
-        payload = error_payload(exc_traceback=None, exception=exception,  config=config)
-        assert len(payload['causes']) == 2
+        payload = error_payload(exc_traceback=None, exception=exception, config=config)
+        assert len(payload["causes"]) == 2
 
 
 def test_error_payload_with_fingerprint():
     config = Configuration()
-    exception = Exception('Test')
-    payload = error_payload(exception, exc_traceback=None, config=config, fingerprint='a fingerprint')
-    assert payload['fingerprint'] == 'a fingerprint'
+    exception = Exception("Test")
+    payload = error_payload(
+        exception, exc_traceback=None, config=config, fingerprint="a fingerprint"
+    )
+    assert payload["fingerprint"] == "a fingerprint"
 
 
 def test_error_payload_with_fingerprint_as_type():
     config = Configuration()
-    exception = Exception('Test')
-    payload = error_payload(exception, exc_traceback=None, config=config, fingerprint={'a': 1, 'b': 2})
-    assert payload['fingerprint'] == "{'a': 1, 'b': 2}"
+    exception = Exception("Test")
+    payload = error_payload(
+        exception, exc_traceback=None, config=config, fingerprint={"a": 1, "b": 2}
+    )
+    assert payload["fingerprint"] == "{'a': 1, 'b': 2}"
 
 
 def test_error_payload_without_fingerprint():
     config = Configuration()
-    exception = Exception('Test')
+    exception = Exception("Test")
     payload = error_payload(exception, exc_traceback=None, config=config)
-    assert payload.get('fingerprint') == None
+    assert payload.get("fingerprint") == None
 
 
 def test_server_payload():
-    config = Configuration(project_root=os.path.dirname(__file__), environment='test', hostname='test.local')
+    config = Configuration(
+        project_root=os.path.dirname(__file__),
+        environment="test",
+        hostname="test.local",
+    )
     payload = server_payload(config)
 
-    assert payload['project_root'] == os.path.dirname(__file__)
-    assert payload['environment_name'] == 'test'
-    assert payload['hostname'] == 'test.local'
-    assert payload['pid'] == os.getpid()
-    assert type(payload['stats']['mem']['total']) == float
-    assert type(payload['stats']['mem']['free']) == float
+    assert payload["project_root"] == os.path.dirname(__file__)
+    assert payload["environment_name"] == "test"
+    assert payload["hostname"] == "test.local"
+    assert payload["pid"] == os.getpid()
+    assert type(payload["stats"]["mem"]["total"]) == float
+    assert type(payload["stats"]["mem"]["free"]) == float
 
 
 def test_psutil_is_optional():
     config = Configuration()
 
-    with patch.dict(sys.modules, {'psutil': None}):
+    with patch.dict(sys.modules, {"psutil": None}):
         payload = server_payload(config)
-        assert payload['stats'] == {}
+        assert payload["stats"] == {}
 
 
 def test_create_payload_without_local_variables():
     config = Configuration()
-    exception = Exception('Test')
+    exception = Exception("Test")
     payload = create_payload(exception, config=config)
-    assert payload['request'].get('local_variables') == None
+    assert payload["request"].get("local_variables") == None
 
 
 def test_create_payload_with_local_variables():
     config = Configuration(report_local_variables=True)
     with pytest.raises(Exception):
         test_local_variable = {"test": "var"}
-        exception = Exception('Test')
+        exception = Exception("Test")
         payload = create_payload(exception, config=config)
-        assert payload['request']['local_variables'] == test_local_variable
+        assert payload["request"]["local_variables"] == test_local_variable

@@ -5,7 +5,7 @@ from honeybadger.plugins import default_plugin_manager
 from .contrib.test_django import DjangoMiddlewareTestCase
 from honeybadger.middleware import DjangoHoneybadgerMiddleware
 
-__all__ = ['MiddlewareTestCase']
+__all__ = ["MiddlewareTestCase"]
 
 
 class MiddlewareTestCase(DjangoMiddlewareTestCase):
