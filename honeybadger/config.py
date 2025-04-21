@@ -5,7 +5,7 @@ from six import iteritems
 
 
 class Configuration(object):
-    DEVELOPMENT_ENVIRONMENTS = ['development', "dev", "test"]
+    DEVELOPMENT_ENVIRONMENTS = ["development", "dev", "test"]
 
     OPTIONS = (
         ("api_key", str),
