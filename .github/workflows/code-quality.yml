@@ -1,4 +1,4 @@
-name: Pylint
+name: Code Quality
 
 on:
   pull_request:
@@ -23,5 +23,9 @@ jobs:
           pip install -r dev-requirements.txt
 
       - name: Run Pylint
+        run: |
+          pylint -E ./honeybadger
+
+      - name: Run Black
         run: |
           pylint -E ./honeybadger
