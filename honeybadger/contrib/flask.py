@@ -147,6 +147,7 @@ class FlaskHoneybadger(object):
         """
         from flask import signals
 
+        # pylint: disable-next=no-member
         if hasattr(signals, "signals_available") and not signals.signals_available:
             self.app.logger.warn(
                 "blinker needs to be installed in order to support %s".format(

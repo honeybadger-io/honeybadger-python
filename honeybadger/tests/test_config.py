@@ -39,6 +39,7 @@ def test_config_bool_types_are_accurate():
 def test_can_only_set_valid_options():
     c = Configuration(foo="bar")
     with pytest.raises(AttributeError):
+        # pylint: disable-next=no-member
         print(c.foo)
 
 

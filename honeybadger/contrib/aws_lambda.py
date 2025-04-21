@@ -63,12 +63,14 @@ def get_lambda_bootstrap():
         return sys.modules["bootstrap"]
     elif "__main__" in sys.modules:
         module = sys.modules["__main__"]
+        # pylint: disable=no-member
         if hasattr(module, "awslambdaricmain") and hasattr(
             module.awslambdaricmain, "bootstrap"
         ):
             return module.awslambdaricmain.bootstrap
         elif hasattr(module, "bootstrap"):
             return module.bootstrap
+        # pylint: enable=no-member
 
         return module
     else:

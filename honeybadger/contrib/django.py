@@ -70,6 +70,7 @@ class DjangoPlugin(Plugin):
         import django
 
         if django.VERSION[0] < 2:
+            # pylint: disable-next=import-error,no-name-in-module
             from django.core.urlresolvers import resolve
         else:
             from django.urls import resolve

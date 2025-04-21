@@ -3,6 +3,7 @@ import django
 from . import views
 
 if django.__version__.startswith("1.11"):
+    # pylint: disable-next=no-name-in-module
     from django.conf.urls import url as path
 else:
     from django.urls import path
