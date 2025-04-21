@@ -24,4 +24,4 @@ jobs:
 
       - name: Run Pylint
         run: |
-          pylint -E ./honeybager
+          pylint -E ./honeybadger
