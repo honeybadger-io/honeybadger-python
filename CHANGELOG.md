@@ -4,6 +4,8 @@ CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+
+## [0.22.1] - 2025-04-22
 - Fix: Prevent infinite loop in exception cause chains by capping traversal
 
 ## [0.22.0] - 2025-03-31
