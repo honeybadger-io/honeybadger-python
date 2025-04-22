@@ -15,6 +15,9 @@ from .utils import filter_dict
 
 logger = logging.getLogger("honeybadger.payload")
 
+# Prevent infinite loops in exception cause chains
+MAX_CAUSE_DEPTH = 15
+
 
 def error_payload(exception, exc_traceback, config, fingerprint=None):
     def _filename(name):
@@ -52,6 +55,34 @@ def error_payload(exception, exc_traceback, config, fingerprint=None):
             ],
         }
 
+    def extract_exception_causes(exception):
+        """
+        Traverses the __cause__ chain of an exception and returns a list of prepared payloads.
+        Limits depth to prevent infinite loops from circular references.
+        """
+        causes = []
+        depth = 0
+
+        while (
+            getattr(exception, "__cause__", None) is not None
+            and depth < MAX_CAUSE_DEPTH
+        ):
+            exception = exception.__cause__
+            causes.append(prepare_exception_payload(exception))
+            depth += 1
+
+        if depth == MAX_CAUSE_DEPTH:
+            causes.append(
+                {
+                    "token": str(uuid.uuid4()),
+                    "class": "HoneybadgerWarning",
+                    "type": "HoneybadgerWarning",
+                    "message": f"Exception cause chain truncated after {MAX_CAUSE_DEPTH} levels. Possible circular reference.",
+                }
+            )
+
+        return causes
+
     if exc_traceback:
         tb = traceback.extract_tb(exc_traceback)
     else:
@@ -60,16 +91,10 @@ def error_payload(exception, exc_traceback, config, fingerprint=None):
     logger.debug(tb)
 
     payload = prepare_exception_payload(exception)
+    payload["causes"] = extract_exception_causes(exception)
 
     if fingerprint is not None:
         payload["fingerprint"] = fingerprint and str(fingerprint).strip() or None
-
-    payload["causes"] = []
-
-    # If exception has a __cause__, Recursively build the causes list.
-    while hasattr(exception, "__cause__") and exception.__cause__ is not None:
-        exception = exception.__cause__
-        payload["causes"].append(prepare_exception_payload(exception))
 
     return payload
 
