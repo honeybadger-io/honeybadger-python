@@ -7,7 +7,7 @@ import uuid
 from six.moves import range
 from six.moves import zip
 from io import open
-from datetime import datetime
+from datetime import datetime, UTC
 
 from .version import __version__
 from .plugins import default_plugin_manager
@@ -17,6 +17,7 @@ logger = logging.getLogger("honeybadger.payload")
 
 # Prevent infinite loops in exception cause chains
 MAX_CAUSE_DEPTH = 15
+
 
 def error_payload(exception, exc_traceback, config, fingerprint=None):
     def _filename(name):
@@ -62,18 +63,23 @@ def error_payload(exception, exc_traceback, config, fingerprint=None):
         causes = []
         depth = 0
 
-        while getattr(exception, "__cause__", None) is not None and depth < MAX_CAUSE_DEPTH:
+        while (
+            getattr(exception, "__cause__", None) is not None
+            and depth < MAX_CAUSE_DEPTH
+        ):
             exception = exception.__cause__
             causes.append(prepare_exception_payload(exception))
             depth += 1
 
         if depth == MAX_CAUSE_DEPTH:
-            causes.append({
-                'token': str(uuid.uuid4()),
-                'class': "HoneybadgerWarning",
-                "type": "HoneybadgerWarning",
-                "message": f"Exception cause chain truncated after {MAX_CAUSE_DEPTH} levels. Possible circular reference."
-            })
+            causes.append(
+                {
+                    "token": str(uuid.uuid4()),
+                    "class": "HoneybadgerWarning",
+                    "type": "HoneybadgerWarning",
+                    "message": f"Exception cause chain truncated after {MAX_CAUSE_DEPTH} levels. Possible circular reference.",
+                }
+            )
 
         return causes
 
@@ -85,7 +91,7 @@ def error_payload(exception, exc_traceback, config, fingerprint=None):
     logger.debug(tb)
 
     payload = prepare_exception_payload(exception)
-    payload['causes'] = extract_exception_causes(exception)
+    payload["causes"] = extract_exception_causes(exception)
 
     if fingerprint is not None:
         payload["fingerprint"] = fingerprint and str(fingerprint).strip() or None
@@ -111,7 +117,7 @@ def server_payload(config):
         "project_root": config.project_root,
         "environment_name": config.environment,
         "hostname": config.hostname,
-        "time": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "time": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "pid": os.getpid(),
         "stats": stats_payload(),
     }

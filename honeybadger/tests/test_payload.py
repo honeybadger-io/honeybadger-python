@@ -4,7 +4,12 @@ from contextlib import contextmanager
 import os
 import sys
 
-from honeybadger.payload import create_payload, error_payload, server_payload, MAX_CAUSE_DEPTH
+from honeybadger.payload import (
+    create_payload,
+    error_payload,
+    server_payload,
+    MAX_CAUSE_DEPTH,
+)
 from honeybadger.config import Configuration
 
 from mock import patch
@@ -96,10 +101,10 @@ def test_error_payload_source_missing_file(_isfile):
 def test_payload_with_no_exception_cause():
     with mock_traceback() as traceback_mock:
         config = Configuration()
-        exception = Exception('Test')
+        exception = Exception("Test")
 
-        payload = error_payload(exc_traceback=None, exception=exception,  config=config)
-        assert len(payload['causes']) == 0
+        payload = error_payload(exc_traceback=None, exception=exception, config=config)
+        assert len(payload["causes"]) == 0
 
 
 def test_payload_captures_exception_cause():
@@ -115,26 +120,29 @@ def test_payload_captures_exception_cause():
 def test_payload_captures_short_exception_cause_chain():
     with mock_traceback() as traceback_mock:
         config = Configuration()
-        exception = Exception('Inner test')
-        innerException = Exception('Inner exception')
-        innerException.__cause__ = Exception('Inner cause')
+        exception = Exception("Inner test")
+        innerException = Exception("Inner exception")
+        innerException.__cause__ = Exception("Inner cause")
         exception.__cause__ = innerException
 
-        payload = error_payload(exc_traceback=None, exception=exception,  config=config)
-        assert len(payload['causes']) == 2
+        payload = error_payload(exc_traceback=None, exception=exception, config=config)
+        assert len(payload["causes"]) == 2
 
 
 def test_payload_captures_circular_exception_cause_chain():
     with mock_traceback() as traceback_mock:
         config = Configuration()
-        exceptionA = Exception('A')
-        exceptionB = Exception('B')
+        exceptionA = Exception("A")
+        exceptionB = Exception("B")
         exceptionA.__cause__ = exceptionB
         exceptionB.__cause__ = exceptionA
 
-        payload = error_payload(exc_traceback=None, exception=exceptionA,  config=config)
-        assert len(payload['causes']) == MAX_CAUSE_DEPTH + 1
-        assert payload['causes'][-1]['message'] == f"Exception cause chain truncated after {MAX_CAUSE_DEPTH} levels. Possible circular reference."
+        payload = error_payload(exc_traceback=None, exception=exceptionA, config=config)
+        assert len(payload["causes"]) == MAX_CAUSE_DEPTH + 1
+        assert (
+            payload["causes"][-1]["message"]
+            == f"Exception cause chain truncated after {MAX_CAUSE_DEPTH} levels. Possible circular reference."
+        )
 
 
 def test_payload_captures_deep_exception_cause_chain():
@@ -147,9 +155,12 @@ def test_payload_captures_deep_exception_cause_chain():
             e.__cause__ = current
             current = e
 
-        payload = error_payload(exc_traceback=None, exception=current,  config=config)
-        assert len(payload['causes']) == MAX_CAUSE_DEPTH + 1
-        assert payload['causes'][-1]['message'] == f"Exception cause chain truncated after {MAX_CAUSE_DEPTH} levels. Possible circular reference."
+        payload = error_payload(exc_traceback=None, exception=current, config=config)
+        assert len(payload["causes"]) == MAX_CAUSE_DEPTH + 1
+        assert (
+            payload["causes"][-1]["message"]
+            == f"Exception cause chain truncated after {MAX_CAUSE_DEPTH} levels. Possible circular reference."
+        )
 
 
 def test_error_payload_with_nested_exception():
