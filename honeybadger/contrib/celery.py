@@ -28,7 +28,7 @@ class CeleryPlugin(Plugin):
 
         # Ensure we have a mutable context dictionary
         context = dict(context or {})
-        
+
         # Add Celery task information to context
         context.update(
             task_id=current_task.request.id,

@@ -103,6 +103,7 @@ class ASGIHoneybadger(plugins.Plugin):
     def _run_asgi2(self, scope):
         async def inner(receive, send):
             return await self._run_app(scope, lambda: self.app(scope)(receive, send))
+
         return inner
 
     async def _run_asgi3(self, scope, receive, send):
