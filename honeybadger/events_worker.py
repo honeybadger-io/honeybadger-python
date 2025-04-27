@@ -6,7 +6,7 @@ from typing import Deque, Dict, Any, Optional, Tuple, Union, List
 
 from .protocols import Connection
 from .config import Configuration
-from .types import EventsSendResult, Event
+from .types import EventsSendStatus, EventsSendResult, Event
 
 
 class EventsWorker:
@@ -23,16 +23,7 @@ class EventsWorker:
         logger: Optional[logging.Logger] = None,
     ) -> None:
         self.connection = connection
-        self.config = {
-            "api_key": config.api_key,
-            "endpoint": config.endpoint,
-            "environment": config.environment,
-        }
-        self.batch_size = config.batch_size
-        self.max_queue = config.max_queue
-        self.flush_interval = config.flush_interval
-        self.max_retries = config.max_retries
-        self.throttle_backoff = config.throttle_backoff
+        self.config = config
 
         self.log = logger or logging.getLogger(__name__)
         self._lock = threading.RLock()
@@ -55,12 +46,12 @@ class EventsWorker:
 
     def push(self, event: Event) -> bool:
         with self._cond:
-            if self._all_events_queued_len() >= self.max_queue:
+            if self._all_events_queued_len() >= self.config.insights_max_queue:
                 self._drop()
                 return False
 
             self._queue.append(event)
-            if len(self._queue) >= self.batch_size:
+            if len(self._queue) >= self.config.insights_batch_size:
                 self._cond.notify()
 
         return True
@@ -76,7 +67,7 @@ class EventsWorker:
             self._cond.notify()
 
         if self._thread.is_alive():
-            timeout = max(self.flush_interval, self.throttle_backoff) * 2
+            timeout = max(self.config.insights_flush_interval, self.config.insights_throttle_backoff) * 2
             self._thread.join(timeout)
         self.log.debug("Events worker stopped")
 
@@ -94,8 +85,8 @@ class EventsWorker:
         while True:
             with self._cond:
                 woke = self._cond.wait_for(
-                    lambda: self._stop or len(self._queue) >= self.batch_size,
-                    timeout=self.flush_interval,
+                    lambda: self._stop or len(self._queue) >= self.config.insights_batch_size,
+                    timeout=self.config.insights_flush_interval,
                 )
                 # if stopped and truly empty, we’re done
                 if self._stop and not self._queue and not self._batches:
@@ -111,7 +102,7 @@ class EventsWorker:
                 self._batches.append((batch, 0))
                 self._start_time = None
 
-            new = deque()
+            new: Deque[Tuple[List[Event], int]] = deque()
             throttled = False
 
             while self._batches:
@@ -121,20 +112,20 @@ class EventsWorker:
                     continue
 
                 result = self._safe_send(batch)
-                if result == "ok":
+                if result == EventsSendStatus.OK:
                     continue
 
-                _, reason = result
                 attempts += 1
-                if reason == "throttled":
+                if result.status == EventsSendStatus.THROTTLING:
                     throttled = True
                     self.log.warning(
-                        f"Rate limited – backing off {self.throttle_backoff}s"
+                        f"Rate limited – backing off {self.config.insights_throttle_backoff}s"
                     )
                 else:
+                    reason = result.reason or "unknown"
                     self.log.debug(f"Batch failed (attempt {attempts}): {reason}")
 
-                if attempts < self.max_retries:
+                if attempts < self.config.insights_max_retries:
                     new.append((batch, attempts))
                 else:
                     self.log.debug(f"Dropping batch after {attempts} retries")
@@ -147,15 +138,15 @@ class EventsWorker:
             return self.connection.send_events(self.config, batch)
         except Exception:
             self.log.exception("Exception sending batch")
-            return "error", "exception"
+            return EventsSendResult(EventsSendStatus.ERROR, "exception")
 
     def _compute_timeout(self) -> Optional[float]:
         if self._throttled:
-            return self.throttle_backoff
+            return self.config.insights_throttle_backoff
         if not self._start_time:
             return None
         elapsed = time.monotonic() - self._start_time
-        return max(0, self.flush_interval - elapsed)
+        return max(0, self.config.insights_flush_interval - elapsed)
 
     def _drop(self) -> None:
         self._dropped += 1

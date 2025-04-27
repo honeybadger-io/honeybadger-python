@@ -21,9 +21,9 @@ class Configuration(object):
         # Insights options
         ("insights_batch_size", int),
         ("insights_max_queue", int),
-        ("insights_flush_interval", int),
+        ("insights_flush_interval", float),
         ("insights_max_retries", int),
-        ("insights_throttle_backoff", int),
+        ("insights_throttle_backoff", float),
     )
 
     def __init__(self, *args, **kwargs):

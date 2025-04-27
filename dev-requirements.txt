@@ -19,5 +19,14 @@ six
 testfixtures
 typing-extensions
 
+# Type checking
+pytest-mypy
+types-six
+types-psutil
+types-mock
+django-stubs
+asgiref
+celery-types
+
 # For Python 3.10+ which removed cgi module
 legacy-cgi==2.6.3

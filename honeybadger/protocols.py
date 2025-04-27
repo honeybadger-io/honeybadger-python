@@ -1,4 +1,4 @@
-from typing import Protocol, Dict, Any, Optional
+from typing import Protocol, Dict, Any, Optional, List
 from .types import EventsSendResult, Notice, Event
 
 
@@ -29,7 +29,7 @@ class Connection(Protocol):
         """
         ...
 
-    def send_events(self, config: Any, payload: Event) -> EventsSendResult:
+    def send_events(self, config: Any, payload: List[Event]) -> EventsSendResult:
         """
         Send event batch to Honeybadger.
 

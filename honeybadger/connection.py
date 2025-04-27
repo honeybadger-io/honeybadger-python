@@ -2,11 +2,13 @@ import logging
 import json
 import threading
 
+from urllib.error import HTTPError, URLError
 from typing import Protocol
 from six.moves.urllib import request
 from six import b
 
 from .utils import StringReprJSONEncoder
+from .types import EventsSendResult, EventsSendStatus
 
 
 logger = logging.getLogger(__name__)
@@ -55,7 +57,7 @@ def send_event(config, payload):
     return _make_http_request(path, config, payload)
 
 
-def send_events(config, payload) -> str:
+def send_events(config, payload) -> EventsSendResult:
     """
     Send events synchronously to Honeybadger.
     Returns:

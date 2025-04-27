@@ -1,5 +1,6 @@
 import os
 import sys
+from typing import Any, Callable, Dict, Optional, TypeVar, cast
 
 from honeybadger import honeybadger
 from honeybadger.plugins import Plugin
@@ -77,8 +78,14 @@ def get_lambda_bootstrap():
         return None
 
 
-def _wrap_lambda_handler(handler):
+# Define a type variable for handler functions
+HandlerType = TypeVar('HandlerType', bound=Callable[..., Any])
 
+
+def _wrap_lambda_handler(handler: HandlerType) -> HandlerType:
+    """
+    Wrap the lambda handler to catch exceptions and report to Honeybadger
+    """
     def wrapped_handler(aws_event, aws_context, *args, **kwargs):
         set_event(aws_event)
 
@@ -93,8 +100,12 @@ def _wrap_lambda_handler(handler):
 
             # Rerase exception to proceed with normal aws error handling
             reraise(*exc_info)
+        finally:
+            # Ensure cleanup happens even if no exception occurs
+            clear_event()
+            honeybadger.reset_context()
 
-    return wrapped_handler
+    return cast(HandlerType, wrapped_handler)
 
 
 class AWSLambdaPlugin(Plugin):
@@ -150,43 +161,50 @@ class AWSLambdaPlugin(Plugin):
         Here we fetch the http & event handler from the lambda bootstrap module
         and override it with a wrapped version
         """
-        if hasattr(lambda_bootstrap, "handle_http_request"):  # pre python3.7
+        if lambda_bootstrap is None:
+            return
 
-            def event_handler(request_handler, *args, **kwargs):
-                request_handler = _wrap_lambda_handler(request_handler)
-                return original_event_handler(request_handler, *args, **kwargs)
-
-            def http_handler(request_handler, *args, **kwargs):
-                request_handler = _wrap_lambda_handler(request_handler)
-                return original_http_handler(request_handler, *args, **kwargs)
-
+        # Pre Python 3.7 handling
+        if hasattr(lambda_bootstrap, "handle_http_request"):
             try:
-                # Get and replace the original handler for events with a wrapped one
+                # Get original handlers
                 original_event_handler = lambda_bootstrap.handle_event_request
                 original_http_handler = lambda_bootstrap.handle_http_request
-                lambda_bootstrap.handle_event_request = event_handler
-                lambda_bootstrap.handle_http_request = http_handler
 
-            except (
-                AttributeError
-            ) as e:  # Fail safely if we can't monkeypatch lambda handler
+                # Define event handler wrapper for pre-3.7
+                def pre37_event_handler(request_handler, *args, **kwargs):
+                    wrapped_handler = _wrap_lambda_handler(request_handler)
+                    return original_event_handler(wrapped_handler, *args, **kwargs)
+
+                # Define HTTP handler wrapper for pre-3.7
+                def pre37_http_handler(request_handler, *args, **kwargs):
+                    wrapped_handler = _wrap_lambda_handler(request_handler)
+                    return original_http_handler(wrapped_handler, *args, **kwargs)
+
+                # Replace the original handlers
+                lambda_bootstrap.handle_event_request = pre37_event_handler
+                lambda_bootstrap.handle_http_request = pre37_http_handler
+
+            except AttributeError as e:
+                # Fail safely if we can't monkeypatch lambda handler
                 logger.warning("Lambda function not wrapped by honeybadger: %s" % e)
 
+        # Python 3.7+ handling
         else:
-
-            def event_handler(lambda_runtime_client, request_handler, *args, **kwargs):
-                request_handler = _wrap_lambda_handler(request_handler)
-                return original_event_handler(
-                    lambda_runtime_client, request_handler, *args, **kwargs
-                )
-
             try:
                 original_event_handler = lambda_bootstrap.handle_event_request
-                lambda_bootstrap.handle_event_request = event_handler
 
-            # Future lambda runtime may change execution strategy yet again
-            # Third party lambda services (such as zappa) may override function execution
-            # either of these will raise an Attribute error as "handle_event_request" or "handle_event_request"
-            # may not be found.
+                # Define event handler wrapper for 3.7+
+                def post37_event_handler(lambda_runtime_client, request_handler, *args, **kwargs):
+                    wrapped_handler = _wrap_lambda_handler(request_handler)
+                    return original_event_handler(
+                        lambda_runtime_client, wrapped_handler, *args, **kwargs
+                    )
+
+                # Replace the original handler
+                lambda_bootstrap.handle_event_request = post37_event_handler
+
             except AttributeError as e:
+                # Future lambda runtime may change execution strategy yet again
+                # Third party lambda services (such as zappa) may override function execution
                 logger.warning("Lambda function not wrapped by honeybadger: %s" % e)

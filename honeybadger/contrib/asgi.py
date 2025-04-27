@@ -3,6 +3,7 @@ import urllib
 import inspect
 import asyncio
 import json
+from typing import Dict, Any, Optional, Callable, Awaitable, Union, Tuple, List, cast
 
 
 def _looks_like_asgi3(app) -> bool:
@@ -17,26 +18,26 @@ def _looks_like_asgi3(app) -> bool:
     return False
 
 
-def _get_headers(scope: dict) -> dict:
-    headers = {}
+def _get_headers(scope: dict) -> Dict[str, str]:
+    headers: Dict[str, str] = {}
     for raw_key, raw_value in scope["headers"]:
         key = raw_key.decode("latin-1")
         value = raw_value.decode("latin-1")
         if key in headers:
-            headers[key] = headers["key"] + ", " + value
+            headers[key] = headers[key] + ", " + value  # Fixed: was headers["key"]
         else:
             headers[key] = value
     return headers
 
 
-def _get_query(scope: dict) -> str:
+def _get_query(scope: dict) -> Optional[str]:
     qs = scope.get("query_string")
     if not qs:
         return None
     return urllib.parse.unquote(qs.decode("latin-1"))
 
 
-def _get_url(scope: dict, default_scheme: str, host: str = None) -> str:
+def _get_url(scope: dict, default_scheme: str, host: Optional[str] = None) -> str:
     scheme = scope.get("scheme", default_scheme)
     server = scope.get("server")
     path = scope.get("root_path", "") + scope.get("path", "")
@@ -52,10 +53,10 @@ def _get_url(scope: dict, default_scheme: str, host: str = None) -> str:
     return path
 
 
-def _get_body(scope: dict) -> dict:
+def _get_body(scope: dict) -> Optional[Union[Dict[Any, Any], str]]:
     body = scope.get("body")
     if body is None:
-        return body
+        return None
 
     try:
         return json.loads(body)
@@ -63,14 +64,15 @@ def _get_body(scope: dict) -> dict:
         return urllib.parse.unquote(body.decode("latin-1"))
 
 
-def _as_context(scope: dict) -> dict:
-    ctx = {}
+def _as_context(scope: dict) -> Dict[str, Any]:
+    ctx: Dict[str, Any] = {}
     if scope.get("type") in ("http", "websocket"):
         ctx["method"] = scope.get("method")
         ctx["headers"] = headers = _get_headers(scope)
         ctx["query_string"] = _get_query(scope)
+        host_header = headers.get("host")
         ctx["url"] = _get_url(
-            scope, "http" if scope["type"] == "http" else "ws", headers.get("host")
+            scope, "http" if scope["type"] == "http" else "ws", host_header
         )
         body = _get_body(scope)
         if body is not None:
