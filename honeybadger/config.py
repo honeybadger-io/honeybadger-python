@@ -18,6 +18,12 @@ class Configuration(object):
         ("force_sync", bool),
         ("excluded_exceptions", list),
         ("report_local_variables", bool),
+        # Insights options
+        ("insights_batch_size", int),
+        ("insights_max_queue", int),
+        ("insights_flush_interval", int),
+        ("insights_max_retries", int),
+        ("insights_throttle_backoff", int),
     )
 
     def __init__(self, *args, **kwargs):
@@ -36,6 +42,12 @@ class Configuration(object):
         self.force_sync = self.is_aws_lambda_environment
         self.excluded_exceptions = []
         self.report_local_variables = False
+
+        self.insights_batch_size = 100
+        self.insights_max_queue = 1_000
+        self.insights_flush_interval = 30.0
+        self.insights_max_retries = 3
+        self.insights_throttle_backoff = 60.0
 
         self.set_12factor_config()
         self.set_config_from_dict(kwargs)
