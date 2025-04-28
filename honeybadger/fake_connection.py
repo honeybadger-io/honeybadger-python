@@ -8,20 +8,17 @@ def send_notice(config, payload):
     logger.info(
         "Development mode is enabled; this error will be reported if it occurs after you deploy your app."
     )
-    logger.debug("[send_notice] config used is {} with payload {}".format(config, payload))
+    logger.debug(
+        "[send_notice] config used is {} with payload {}".format(config, payload)
+    )
     return notice_id
 
-
-def send_event(config, payload):
-    logger.info(
-        "Development mode is enabled; this event will be reported if it occurs after you deploy your app."
-    )
-    logger.debug("[send_event] config used is {} with payload {}".format(config, payload))
-    return True
 
 def send_events(config, payload):
     logger.info(
         "Development mode is enabled; this event will be reported if it occurs after you deploy your app."
     )
-    logger.debug("[send_events] config used is {} with payload {}".format(config, payload))
+    logger.debug(
+        "[send_events] config used is {} with payload {}".format(config, payload)
+    )
     return True

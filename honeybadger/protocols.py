@@ -16,19 +16,6 @@ class Connection(Protocol):
         """
         ...
 
-    def send_event(self, config: Any, payload: Event) -> Any:
-        """
-        Send an event to Honeybadger.
-
-        Args:
-            config: The Honeybadger configuration object
-            payload: The event payload to send
-
-        Returns:
-            Implementation-specific return value
-        """
-        ...
-
     def send_events(self, config: Any, payload: List[Event]) -> EventsSendResult:
         """
         Send event batch to Honeybadger.

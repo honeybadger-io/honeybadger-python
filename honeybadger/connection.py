@@ -52,11 +52,6 @@ def send_notice(config, payload):
     return notice_id
 
 
-def send_event(config, payload):
-    path = "/v1/events/"
-    return _make_http_request(path, config, payload)
-
-
 def send_events(config, payload) -> EventsSendResult:
     """
     Send events synchronously to Honeybadger.
@@ -88,9 +83,7 @@ def send_events(config, payload) -> EventsSendResult:
 
     if status == 201 or status == 200:
         logger.debug(
-            "Sent {} events to Honeybadger, got HTTP {}".format(
-                len(payload), status
-            )
+            "Sent {} events to Honeybadger, got HTTP {}".format(len(payload), status)
         )
         return EventsSendResult(EventsSendStatus.OK)
     if status == 429:

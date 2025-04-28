@@ -1,6 +1,6 @@
 from honeybadger.fake_connection import send_notice
 
-from testfixtures import log_capture # type: ignore
+from testfixtures import log_capture  # type: ignore
 import json
 
 
