@@ -19,11 +19,11 @@ class Configuration(object):
         ("excluded_exceptions", list),
         ("report_local_variables", bool),
         # Insights options
-        ("insights_batch_size", int),
-        ("insights_max_queue", int),
-        ("insights_flush_interval", float),
-        ("insights_max_retries", int),
-        ("insights_throttle_backoff", float),
+        ("events_batch_size", int),
+        ("events_max_queue_size", int),
+        ("events_timeout", float),
+        ("events_max_batch_retries", int),
+        ("events_throttle_wait", float),
     )
 
     def __init__(self, *args, **kwargs):
@@ -43,11 +43,11 @@ class Configuration(object):
         self.excluded_exceptions = []
         self.report_local_variables = False
 
-        self.insights_batch_size = 100
-        self.insights_max_queue = 1_000
-        self.insights_flush_interval = 30.0
-        self.insights_max_retries = 3
-        self.insights_throttle_backoff = 60.0
+        self.events_max_batch_retries = 3
+        self.events_max_queue_size = 10_000
+        self.events_batch_size = 1000
+        self.events_timeout = 5.0
+        self.events_throttle_wait = 60.0
 
         self.set_12factor_config()
         self.set_config_from_dict(kwargs)

@@ -49,12 +49,12 @@ class EventsWorker:
 
     def push(self, event: Event) -> bool:
         with self._cond:
-            if self._all_events_queued_len() >= self.config.insights_max_queue:
+            if self._all_events_queued_len() >= self.config.events_max_queue_size:
                 self._drop()
                 return False
 
             self._queue.append(event)
-            if len(self._queue) >= self.config.insights_batch_size:
+            if len(self._queue) >= self.config.events_batch_size:
                 self._cond.notify()
 
         return True
@@ -68,8 +68,8 @@ class EventsWorker:
         if self._thread.is_alive():
             timeout = (
                 max(
-                    self.config.insights_flush_interval,
-                    self.config.insights_throttle_backoff,
+                    self.config.events_timeout,
+                    self.config.events_throttle_wait,
                 )
                 * 2
             )
@@ -95,7 +95,7 @@ class EventsWorker:
                 # Wake on stop flag, full batch, or after compute_timeout
                 self._cond.wait_for(
                     lambda: self._stop
-                    or len(self._queue) >= self.config.insights_batch_size,
+                    or len(self._queue) >= self.config.events_batch_size,
                     timeout=self._compute_timeout(),
                 )
                 # Exit when shutdown requested and all work is done
@@ -144,14 +144,14 @@ class EventsWorker:
                 if result.status == EventsSendStatus.THROTTLING:
                     throttled = True
                     self.log.warning(
-                        f"Rate limited – backing off {self.config.insights_throttle_backoff}s"
+                        f"Rate limited – backing off {self.config.events_throttle_wait}s"
                     )
                 else:
                     reason = result.reason or "unknown"
                     self.log.debug(f"Batch failed (attempt {attempts}): {reason}")
 
                 # Retry or drop based on max_retries
-                if attempts < self.config.insights_max_retries:
+                if attempts < self.config.events_max_batch_retries:
                     new.append((batch, attempts))
                 else:
                     self.log.debug(f"Dropping batch after {attempts} retries")
@@ -165,8 +165,8 @@ class EventsWorker:
         Determine sleep time: use backoff if throttled, else fixed flush interval.
         """
         if self._throttled:
-            return self.config.insights_throttle_backoff
-        return self.config.insights_flush_interval
+            return self.config.events_throttle_wait
+        return self.config.events_timeout
 
     def _drop(self) -> None:
         """

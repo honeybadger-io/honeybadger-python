@@ -29,11 +29,11 @@ def base_config():
         api_key="key",
         endpoint="url",
         environment="env",
-        insights_batch_size=3,
-        insights_max_queue=10,
-        insights_flush_interval=0.1,
-        insights_max_retries=2,
-        insights_throttle_backoff=0.1,
+        events_batch_size=3,
+        events_max_queue_size=10,
+        events_timeout=0.1,
+        events_max_batch_retries=2,
+        events_throttle_wait=0.1,
     )
 
 
@@ -73,7 +73,7 @@ def test_no_send_under_batch_size(worker):
 
 def test_drop_events_when_queue_full(base_config):
     cfg = SimpleNamespace(**vars(base_config))
-    cfg.insights_max_queue = 4
+    cfg.events_max_queue_size = 4
     conn = DummyConnection()
     w = EventsWorker(connection=conn, config=cfg)
     dropped = 0
@@ -89,60 +89,60 @@ def test_drop_events_when_queue_full(base_config):
 
 def test_flush_on_timeout(base_config):
     cfg = SimpleNamespace(**vars(base_config))
-    cfg.insights_batch_size = 10
-    cfg.insights_flush_interval = 0.05
+    cfg.events_batch_size = 10
+    cfg.events_timeout = 0.05
     conn = DummyConnection()
     w = EventsWorker(connection=conn, config=cfg)
     for e in ({"id": 1}, {"id": 2}):
         w.push(e)
-    time.sleep(cfg.insights_flush_interval + 0.05)
+    time.sleep(cfg.events_timeout + 0.05)
     assert conn.batches == [[{"id": 1}, {"id": 2}]]
     w.shutdown()
 
 
 def test_reset_timer_after_send(base_config):
     cfg = SimpleNamespace(**vars(base_config))
-    cfg.insights_flush_interval = 0.05
+    cfg.events_timeout = 0.05
     conn = DummyConnection()
     w = EventsWorker(connection=conn, config=cfg)
     first = [{"id": 1}, {"id": 2}, {"id": 3}]
     for e in first:
         w.push(e)
-    assert wait_for(lambda: len(conn.batches) >= 1, cfg.insights_flush_interval + 0.02)
+    assert wait_for(lambda: len(conn.batches) >= 1, cfg.events_timeout + 0.02)
     assert conn.batches[0] == first
     second = [{"id": 4}, {"id": 5}]
     for e in second:
         w.push(e)
-    time.sleep(cfg.insights_flush_interval / 2)
+    time.sleep(cfg.events_timeout / 2)
     assert len(conn.batches) == 1
-    time.sleep(cfg.insights_flush_interval)
+    time.sleep(cfg.events_timeout)
     assert conn.batches[1] == second
     w.shutdown()
 
 
 def test_retry_and_drop_after_max_retries(base_config):
     cfg = SimpleNamespace(**vars(base_config))
-    cfg.insights_batch_size = 2
-    cfg.insights_flush_interval = 0.05
-    cfg.insights_max_retries = 3
+    cfg.events_batch_size = 2
+    cfg.events_timeout = 0.05
+    cfg.events_max_batch_retries = 3
     behaviors = [
         EventsSendResult(EventsSendStatus.ERROR, "fail")
-    ] * cfg.insights_max_retries
+    ] * cfg.events_max_batch_retries
     conn = DummyConnection(behaviors=behaviors)
     w = EventsWorker(connection=conn, config=cfg)
     for e in ({"id": 1}, {"id": 2}):
         w.push(e)
-    time.sleep(cfg.insights_flush_interval * (cfg.insights_max_retries + 1))
-    assert len(conn.batches) == cfg.insights_max_retries
+    time.sleep(cfg.events_timeout * (cfg.events_max_batch_retries + 1))
+    assert len(conn.batches) == cfg.events_max_batch_retries
     assert w.get_stats()["batch_count"] == 0
     w.shutdown()
 
 
 def test_queue_new_events_during_retries(base_config):
     cfg = SimpleNamespace(**vars(base_config))
-    cfg.insights_batch_size = 2
-    cfg.insights_flush_interval = 0.05
-    cfg.insights_max_retries = 2
+    cfg.events_batch_size = 2
+    cfg.events_timeout = 0.05
+    cfg.events_max_batch_retries = 2
     behaviors = [
         EventsSendResult(EventsSendStatus.ERROR, "fail"),
         EventsSendResult(EventsSendStatus.OK),
@@ -156,7 +156,7 @@ def test_queue_new_events_during_retries(base_config):
     second = [{"id": 3}, {"id": 4}]
     for e in second:
         w.push(e)
-    time.sleep(cfg.insights_flush_interval * 2)
+    time.sleep(cfg.events_timeout * 2)
     assert conn.batches[0] == first
     assert conn.batches[1] == first
     assert conn.batches[2] == second
@@ -165,19 +165,19 @@ def test_queue_new_events_during_retries(base_config):
 
 def test_does_not_reset_timer_on_subsequent_pushes(base_config):
     cfg = SimpleNamespace(**vars(base_config))
-    cfg.insights_batch_size = 100
-    cfg.insights_flush_interval = 0.1
+    cfg.events_batch_size = 100
+    cfg.events_timeout = 0.1
 
     conn = DummyConnection()
     w = EventsWorker(connection=conn, config=cfg)
 
     w.push({"id": 1})
-    time.sleep(cfg.insights_flush_interval * 0.4)
+    time.sleep(cfg.events_timeout * 0.4)
     w.push({"id": 2})
-    time.sleep(cfg.insights_flush_interval * 0.4)
+    time.sleep(cfg.events_timeout * 0.4)
     w.push({"id": 3})
 
-    assert wait_for(lambda: len(conn.batches) >= 1, cfg.insights_flush_interval * 1.1)
+    assert wait_for(lambda: len(conn.batches) >= 1, cfg.events_timeout * 1.1)
     assert conn.batches[0] == [{"id": 1}, {"id": 2}, {"id": 3}]
 
     w.shutdown()
@@ -185,8 +185,8 @@ def test_does_not_reset_timer_on_subsequent_pushes(base_config):
 
 def test_pushes_after_flush(base_config):
     cfg = SimpleNamespace(**vars(base_config))
-    cfg.insights_batch_size = 100
-    cfg.insights_flush_interval = 0.05
+    cfg.events_batch_size = 100
+    cfg.events_timeout = 0.05
     conn = DummyConnection()
     w = EventsWorker(connection=conn, config=cfg)
     w.push({"id": 1})
@@ -194,15 +194,15 @@ def test_pushes_after_flush(base_config):
     assert conn.batches[0] == [{"id": 1}]
     w.push({"id": 2})
     assert len(conn.batches) == 1
-    time.sleep(cfg.insights_flush_interval + 0.01)
+    time.sleep(cfg.events_timeout + 0.01)
     assert conn.batches[1] == [{"id": 2}]
     w.shutdown()
 
 
 def test_throttling_and_resume(base_config):
     cfg = SimpleNamespace(**vars(base_config))
-    cfg.insights_batch_size = 2
-    cfg.insights_flush_interval = 0.05
+    cfg.events_batch_size = 2
+    cfg.events_timeout = 0.05
     behaviors = [
         EventsSendResult(EventsSendStatus.ERROR, "throttled"),
         EventsSendResult(EventsSendStatus.OK),
@@ -217,7 +217,7 @@ def test_throttling_and_resume(base_config):
     second = [{"id": 3}, {"id": 4}]
     for e in second:
         w.push(e)
-    time.sleep(cfg.insights_throttle_backoff + cfg.insights_flush_interval * 2)
+    time.sleep(cfg.events_throttle_wait + cfg.events_timeout * 2)
     assert conn.batches[0] == first
     assert conn.batches[1] == first
     assert conn.batches[2] == second
@@ -226,8 +226,8 @@ def test_throttling_and_resume(base_config):
 
 def test_true_throttling_status_flips_throttled_flag_and_retries_fast(base_config):
     cfg = base_config
-    cfg.insights_flush_interval = 0.01
-    cfg.insights_throttle_backoff = 0.01
+    cfg.events_timeout = 0.01
+    cfg.events_throttle_wait = 0.01
 
     behaviors = [
         EventsSendResult(EventsSendStatus.THROTTLING),
@@ -236,7 +236,7 @@ def test_true_throttling_status_flips_throttled_flag_and_retries_fast(base_confi
     conn = DummyConnection(behaviors=behaviors)
     w = EventsWorker(connection=conn, config=cfg)
 
-    for i in range(cfg.insights_batch_size):
+    for i in range(cfg.events_batch_size):
         assert w.push({"id": i})
 
     assert wait_for(
@@ -254,9 +254,9 @@ def test_true_throttling_status_flips_throttled_flag_and_retries_fast(base_confi
 
 def test_flush_delay_respects_throttle_wait(base_config):
     cfg = SimpleNamespace(**vars(base_config))
-    cfg.insights_batch_size = 2
-    cfg.insights_flush_interval = 0.05
-    cfg.insights_throttle_backoff = 0.15
+    cfg.events_batch_size = 2
+    cfg.events_timeout = 0.05
+    cfg.events_throttle_wait = 0.15
 
     behaviors = [
         EventsSendResult(EventsSendStatus.ERROR, "throttled"),
@@ -269,7 +269,7 @@ def test_flush_delay_respects_throttle_wait(base_config):
         w.push(e)
 
     assert wait_for(lambda: len(conn.batches) >= 1, 0.1)
-    assert wait_for(lambda: len(conn.batches) >= 2, cfg.insights_throttle_backoff + 0.1)
+    assert wait_for(lambda: len(conn.batches) >= 2, cfg.events_throttle_wait + 0.1)
     assert conn.batches[1] == [{"id": 1}, {"id": 2}]
     w.shutdown()
 
@@ -288,14 +288,14 @@ def test_interleave_new_events_during_throttle_backoff(base_config):
         w.push(e)
 
     assert wait_for(
-        lambda: len(conn.batches) >= 1, timeout=cfg.insights_flush_interval
-    ), f"Expected first batch within {cfg.insights_flush_interval}s"
+        lambda: len(conn.batches) >= 1, timeout=cfg.events_timeout
+    ), f"Expected first batch within {cfg.events_timeout}s"
 
     second = [{"id": 4}, {"id": 5}, {"id": 6}]
     for e in second:
         w.push(e)
 
-    total_wait = cfg.insights_throttle_backoff + cfg.insights_flush_interval * 2
+    total_wait = cfg.events_throttle_wait + cfg.events_timeout * 2
     assert wait_for(
         lambda: len(conn.batches) >= 3, timeout=total_wait
     ), f"Expected 3 batches within {total_wait}s"
@@ -309,8 +309,8 @@ def test_interleave_new_events_during_throttle_backoff(base_config):
 
 def test_send_remaining_on_shutdown(base_config):
     cfg = SimpleNamespace(**vars(base_config))
-    cfg.insights_batch_size = 100
-    cfg.insights_flush_interval = 1.0
+    cfg.events_batch_size = 100
+    cfg.events_timeout = 1.0
     conn = DummyConnection()
     w = EventsWorker(connection=conn, config=cfg)
     for e in ({"id": 1}, {"id": 2}):
