@@ -8,9 +8,9 @@ from honeybadger.plugins import Plugin, default_plugin_manager
 from honeybadger.utils import filter_dict, filter_env_vars
 
 try:
-    from threading import local # type: ignore[no-redef]
+    from threading import local  # type: ignore[no-redef]
 except ImportError:
-    from django.utils._threading_local import local # type: ignore[no-redef,import]
+    from django.utils._threading_local import local  # type: ignore[no-redef,import]
 
 
 _thread_locals = local()
@@ -71,7 +71,7 @@ class DjangoPlugin(Plugin):
 
         if django.VERSION[0] < 2:
             # pylint: disable-next=import-error,no-name-in-module
-            from django.core.urlresolvers import resolve # type: ignore[import]
+            from django.core.urlresolvers import resolve  # type: ignore[import]
         else:
             from django.urls import resolve
 

@@ -79,13 +79,14 @@ def get_lambda_bootstrap():
 
 
 # Define a type variable for handler functions
-HandlerType = TypeVar('HandlerType', bound=Callable[..., Any])
+HandlerType = TypeVar("HandlerType", bound=Callable[..., Any])
 
 
 def _wrap_lambda_handler(handler: HandlerType) -> HandlerType:
     """
     Wrap the lambda handler to catch exceptions and report to Honeybadger
     """
+
     def wrapped_handler(aws_event, aws_context, *args, **kwargs):
         set_event(aws_event)
 
@@ -195,7 +196,9 @@ class AWSLambdaPlugin(Plugin):
                 original_event_handler = lambda_bootstrap.handle_event_request
 
                 # Define event handler wrapper for 3.7+
-                def post37_event_handler(lambda_runtime_client, request_handler, *args, **kwargs):
+                def post37_event_handler(
+                    lambda_runtime_client, request_handler, *args, **kwargs
+                ):
                     wrapped_handler = _wrap_lambda_handler(request_handler)
                     return original_event_handler(
                         lambda_runtime_client, wrapped_handler, *args, **kwargs
