@@ -22,12 +22,8 @@ class Honeybadger(object):
         self.config = Configuration()
         self.thread_local = threading.local()
         self.thread_local.context = {}
-        if self.config.is_dev() and not self.config.force_report_data:
-            self.connection = fake_connection
-        else:
-            self.connection = connection
         self.events_worker = EventsWorker(
-            self.connection, self.config, logger=logging.getLogger("honeybadger")
+            self._connection(), self.config, logger=logging.getLogger("honeybadger")
         )
         atexit.register(self.events_worker.shutdown)
 
@@ -41,10 +37,7 @@ class Honeybadger(object):
             context=context,
             fingerprint=fingerprint,
         )
-        if self.config.is_dev() and not self.config.force_report_data:
-            return fake_connection.send_notice(self.config, payload)
-        else:
-            return connection.send_notice(self.config, payload)
+        self._connection().send_notice(self.config, payload)
 
     def _get_context(self):
         return getattr(self.thread_local, "context", {})
@@ -145,3 +138,9 @@ class Honeybadger(object):
             raise
         else:
             self.thread_local.context = original_context
+
+    def _connection(self):
+        if self.config.is_dev() and not self.config.force_report_data:
+            return fake_connection
+        else:
+            return connection
