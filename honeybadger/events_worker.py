@@ -112,7 +112,7 @@ class EventsWorker:
                     continue
 
                 result = self._safe_send(batch)
-                if result == EventsSendStatus.OK:
+                if result.status == EventsSendStatus.OK:
                     continue
 
                 attempts += 1

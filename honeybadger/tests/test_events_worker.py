@@ -18,7 +18,7 @@ class DummyConnection:
         if self.call_count < len(self.behaviors):
             result = self.behaviors[self.call_count]
         else:
-            result = EventsSendStatus.OK
+            result = EventsSendResult(EventsSendStatus.OK)
         self.call_count += 1
         return result
 
@@ -141,7 +141,10 @@ def test_queue_new_events_during_retries(base_config):
     cfg.insights_batch_size = 2
     cfg.insights_flush_interval = 0.05
     cfg.insights_max_retries = 2
-    behaviors = [EventsSendResult(EventsSendStatus.ERROR, "fail"), EventsSendStatus.OK]
+    behaviors = [
+        EventsSendResult(EventsSendStatus.ERROR, "fail"),
+        EventsSendResult(EventsSendStatus.OK)
+    ]
     conn = DummyConnection(behaviors=behaviors)
     w = EventsWorker(connection=conn, config=cfg)
     first = [{"id": 1}, {"id": 2}]
@@ -199,7 +202,11 @@ def test_throttling_and_resume(base_config):
     cfg.insights_batch_size = 2
     cfg.insights_flush_interval = 0.05
     cfg.insights_throttle_backoff = 0.1
-    behaviors = [EventsSendResult(EventsSendStatus.ERROR, "throttled"), EventsSendStatus.OK, EventsSendStatus.OK]
+    behaviors = [
+        EventsSendResult(EventsSendStatus.ERROR, "throttled"),
+        EventsSendResult(EventsSendStatus.OK),
+        EventsSendResult(EventsSendStatus.OK)
+    ]
     conn = DummyConnection(behaviors=behaviors)
     w = EventsWorker(connection=conn, config=cfg)
     first = [{"id": 1}, {"id": 2}]
@@ -222,7 +229,10 @@ def test_flush_delay_respects_throttle_wait(base_config):
     cfg.insights_flush_interval = 0.05
     cfg.insights_throttle_backoff = 0.15
 
-    behaviors = [EventsSendResult(EventsSendStatus.ERROR, "throttled"), EventsSendStatus.OK]
+    behaviors = [
+        EventsSendResult(EventsSendStatus.ERROR, "throttled"),
+        EventsSendResult(EventsSendStatus.OK)
+    ]
     conn = DummyConnection(behaviors=behaviors)
     w = EventsWorker(connection=conn, config=cfg)
 

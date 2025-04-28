@@ -68,9 +68,11 @@ def send_events(config, payload) -> EventsSendResult:
     if not config.api_key:
         return EventsSendResult(EventsSendStatus.ERROR, "missing api key")
 
+    jsonl = "\n".join(json.dumps(it, cls=StringReprJSONEncoder) for it in payload)
+
     req = request.Request(
         url=f"{config.endpoint}/v1/events/",
-        data=b(json.dumps(payload, cls=StringReprJSONEncoder)),
+        data=jsonl.encode("utf-8"),
     )
     req.add_header("X-Api-Key", config.api_key)
     req.add_header("Content-Type", "application/x-ndjson")
@@ -84,7 +86,12 @@ def send_events(config, payload) -> EventsSendResult:
     except URLError as e:
         return EventsSendResult(EventsSendStatus.ERROR, str(e.reason))
 
-    if status == 201:
+    if status == 201 or status == 200:
+        logger.debug(
+            "Sent {} events to Honeybadger, got HTTP {}".format(
+                len(payload), status
+            )
+        )
         return EventsSendResult(EventsSendStatus.OK)
     if status == 429:
         return EventsSendResult(EventsSendStatus.THROTTLING)

@@ -4,10 +4,12 @@ import sys
 import logging
 import copy
 import time
+import datetime
 
 from honeybadger.plugins import default_plugin_manager
 import honeybadger.connection as connection
 import honeybadger.fake_connection as fake_connection
+from .events_worker import EventsWorker
 from .payload import create_payload
 from .config import Configuration
 
@@ -19,6 +21,13 @@ class Honeybadger(object):
         self.config = Configuration()
         self.thread_local = threading.local()
         self.thread_local.context = {}
+        if self.config.is_dev() and not self.config.force_report_data:
+            self.connection = fake_connection
+        else:
+            self.connection = connection
+        self.events_worker = EventsWorker(
+            self.connection, self.config, logger=logging.getLogger("honeybadger")
+        )
 
     def _send_notice(
         self, exception, exc_traceback=None, context=None, fingerprint=None
@@ -34,12 +43,6 @@ class Honeybadger(object):
             return fake_connection.send_notice(self.config, payload)
         else:
             return connection.send_notice(self.config, payload)
-
-    def _send_event(self, payload):
-        if self.config.is_dev() and not self.config.force_report_data:
-            return fake_connection.send_event(self.config, payload)
-        else:
-            return connection.send_event(self.config, payload)
 
     def _get_context(self):
         return getattr(self.thread_local, "context", {})
@@ -101,9 +104,11 @@ class Honeybadger(object):
 
         # Add a timestamp to the payload if not provided
         if "ts" not in payload:
-            payload["ts"] = time.time()
+            payload["ts"] = datetime.datetime.now(datetime.timezone.utc)
+        if isinstance(payload["ts"], datetime.datetime):
+            payload["ts"] = payload["ts"].strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
-        return self._send_event(payload)
+        return self.events_worker.push(payload)
 
     def configure(self, **kwargs):
         self.config.set_config_from_dict(kwargs)
