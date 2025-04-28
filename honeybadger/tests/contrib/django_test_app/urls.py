@@ -4,7 +4,7 @@ from . import views
 
 if django.__version__.startswith("1.11"):
     # pylint: disable-next=no-name-in-module
-    from django.conf.urls import url as path  # type: ignore[no-redef]
+    from django.conf.urls import url as path  # type: ignore[attr-defined]
 else:
     from django.urls import path  # type: ignore[no-redef]
 
