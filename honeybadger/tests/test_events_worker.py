@@ -125,7 +125,9 @@ def test_retry_and_drop_after_max_retries(base_config):
     cfg.insights_batch_size = 2
     cfg.insights_flush_interval = 0.05
     cfg.insights_max_retries = 3
-    behaviors = [EventsSendResult(EventsSendStatus.ERROR, "fail")] * cfg.insights_max_retries
+    behaviors = [
+        EventsSendResult(EventsSendStatus.ERROR, "fail")
+    ] * cfg.insights_max_retries
     conn = DummyConnection(behaviors=behaviors)
     w = EventsWorker(connection=conn, config=cfg)
     for e in ({"id": 1}, {"id": 2}):
@@ -143,7 +145,7 @@ def test_queue_new_events_during_retries(base_config):
     cfg.insights_max_retries = 2
     behaviors = [
         EventsSendResult(EventsSendStatus.ERROR, "fail"),
-        EventsSendResult(EventsSendStatus.OK)
+        EventsSendResult(EventsSendStatus.OK),
     ]
     conn = DummyConnection(behaviors=behaviors)
     w = EventsWorker(connection=conn, config=cfg)
@@ -201,11 +203,10 @@ def test_throttling_and_resume(base_config):
     cfg = SimpleNamespace(**vars(base_config))
     cfg.insights_batch_size = 2
     cfg.insights_flush_interval = 0.05
-    cfg.insights_throttle_backoff = 0.1
     behaviors = [
         EventsSendResult(EventsSendStatus.ERROR, "throttled"),
         EventsSendResult(EventsSendStatus.OK),
-        EventsSendResult(EventsSendStatus.OK)
+        EventsSendResult(EventsSendStatus.OK),
     ]
     conn = DummyConnection(behaviors=behaviors)
     w = EventsWorker(connection=conn, config=cfg)
@@ -223,6 +224,34 @@ def test_throttling_and_resume(base_config):
     w.shutdown()
 
 
+def test_true_throttling_status_flips_throttled_flag_and_retries_fast(base_config):
+    cfg = base_config
+    cfg.insights_flush_interval = 0.01
+    cfg.insights_throttle_backoff = 0.01
+
+    behaviors = [
+        EventsSendResult(EventsSendStatus.THROTTLING),
+        EventsSendResult(EventsSendStatus.OK),
+    ]
+    conn = DummyConnection(behaviors=behaviors)
+    w = EventsWorker(connection=conn, config=cfg)
+
+    for i in range(cfg.insights_batch_size):
+        assert w.push({"id": i})
+
+    assert wait_for(
+        lambda: conn.call_count >= 1, timeout=0.05
+    ), f"first send never happened, call_count={conn.call_count}"
+    assert w.get_stats()["throttling"] is True
+
+    assert wait_for(
+        lambda: conn.call_count >= 2, timeout=0.1
+    ), f"retry never happened, call_count={conn.call_count}"
+    assert w.get_stats()["throttling"] is False
+
+    w.shutdown()
+
+
 def test_flush_delay_respects_throttle_wait(base_config):
     cfg = SimpleNamespace(**vars(base_config))
     cfg.insights_batch_size = 2
@@ -231,7 +260,7 @@ def test_flush_delay_respects_throttle_wait(base_config):
 
     behaviors = [
         EventsSendResult(EventsSendStatus.ERROR, "throttled"),
-        EventsSendResult(EventsSendStatus.OK)
+        EventsSendResult(EventsSendStatus.OK),
     ]
     conn = DummyConnection(behaviors=behaviors)
     w = EventsWorker(connection=conn, config=cfg)
@@ -242,6 +271,39 @@ def test_flush_delay_respects_throttle_wait(base_config):
     assert wait_for(lambda: len(conn.batches) >= 1, 0.1)
     assert wait_for(lambda: len(conn.batches) >= 2, cfg.insights_throttle_backoff + 0.1)
     assert conn.batches[1] == [{"id": 1}, {"id": 2}]
+    w.shutdown()
+
+
+def test_interleave_new_events_during_throttle_backoff(base_config):
+    cfg = base_config
+    behaviors = [
+        EventsSendResult(EventsSendStatus.THROTTLING),
+        EventsSendResult(EventsSendStatus.OK),
+    ]
+    conn = DummyConnection(behaviors=behaviors)
+    w = EventsWorker(connection=conn, config=cfg)
+
+    first = [{"id": 1}, {"id": 2}, {"id": 3}]
+    for e in first:
+        w.push(e)
+
+    assert wait_for(
+        lambda: len(conn.batches) >= 1, timeout=cfg.insights_flush_interval
+    ), f"Expected first batch within {cfg.insights_flush_interval}s"
+
+    second = [{"id": 4}, {"id": 5}, {"id": 6}]
+    for e in second:
+        w.push(e)
+
+    total_wait = cfg.insights_throttle_backoff + cfg.insights_flush_interval * 2
+    assert wait_for(
+        lambda: len(conn.batches) >= 3, timeout=total_wait
+    ), f"Expected 3 batches within {total_wait}s"
+
+    assert conn.batches[0] == first
+    assert conn.batches[1] == first
+    assert conn.batches[2] == second
+
     w.shutdown()
 
 
