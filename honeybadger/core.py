@@ -109,6 +109,10 @@ class Honeybadger(object):
         self.config.set_config_from_dict(kwargs)
         self.auto_discover_plugins()
 
+        # Update events worker with new config
+        self.events_worker.connection = self._connection()
+        self.events_worker.config = self.config
+
     def auto_discover_plugins(self):
         # Avoiding circular import error
         from honeybadger import contrib
