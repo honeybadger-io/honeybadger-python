@@ -5,6 +5,7 @@ import logging
 import copy
 import time
 import datetime
+import atexit
 
 from honeybadger.plugins import default_plugin_manager
 import honeybadger.connection as connection
@@ -28,6 +29,7 @@ class Honeybadger(object):
         self.events_worker = EventsWorker(
             self.connection, self.config, logger=logging.getLogger("honeybadger")
         )
+        atexit.register(self.events_worker.shutdown)
 
     def _send_notice(
         self, exception, exc_traceback=None, context=None, fingerprint=None
