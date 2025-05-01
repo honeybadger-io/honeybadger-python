@@ -24,7 +24,7 @@ def _get_headers(scope: dict) -> Dict[str, str]:
         key = raw_key.decode("latin-1")
         value = raw_value.decode("latin-1")
         if key in headers:
-            headers[key] = headers[key] + ", " + value  # Fixed: was headers["key"]
+            headers[key] = headers[key] + ", " + value
         else:
             headers[key] = value
     return headers
