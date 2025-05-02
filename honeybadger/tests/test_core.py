@@ -256,7 +256,7 @@ def test_notify_with_context_tags():
 
     with mock_urlopen(test_payload) as request_mock:
         hb.configure(api_key="aaa", force_report_data=True)
-        hb.set_context(tags="tag1")
+        hb.set_context(_tags="tag1")
         hb.notify(
             error_class="Exception", error_message="Test.", context=dict(bar="foo")
         )
@@ -271,7 +271,7 @@ def test_notify_with_context_merging_tags():
 
     with mock_urlopen(test_payload) as request_mock:
         hb.configure(api_key="aaa", force_report_data=True)
-        hb.set_context(tags="tag1")
+        hb.set_context(_tags="tag1")
         hb.notify(
             error_class="Exception",
             error_message="Test.",

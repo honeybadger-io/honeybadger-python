@@ -54,7 +54,7 @@ class Honeybadger(object):
 
     def exception_hook(self, type, value, exc_traceback):
         context = self._get_context()
-        tags = self._construct_tags(context.get("tags", []))
+        tags = self._construct_tags(context.get("_tags", []))
         self._send_notice(value, exc_traceback, context=context, tags=tags)
         self.existing_except_hook(type, value, exc_traceback)
 
@@ -77,7 +77,7 @@ class Honeybadger(object):
             exception = {"error_class": error_class, "error_message": error_message}
 
         merged_context = self._get_context()
-        tags_from_context = self._construct_tags(merged_context.get("tags", []))
+        tags_from_context = self._construct_tags(merged_context.get("_tags", []))
         tags_from_args = self._construct_tags(tags or [])
 
         merged_tags = list(set(tags_from_context + tags_from_args))
