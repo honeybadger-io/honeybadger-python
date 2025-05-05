@@ -3,13 +3,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def send_notice(config, payload):
+def send_notice(config, notice):
+    if notice.halted:
+        return
+
+    payload = notice.payload
     notice_id = payload.get("error", {}).get("token", None)
     logger.info(
         "Development mode is enabled; this error will be reported if it occurs after you deploy your app."
-    )
-    logger.debug(
-        "[send_notice] config used is {} with payload {}".format(config, payload)
     )
     return notice_id
 

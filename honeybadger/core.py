@@ -13,8 +13,9 @@ import honeybadger.fake_connection as fake_connection
 from .events_worker import EventsWorker
 from .payload import create_payload
 from .config import Configuration
+from .notice import Notice
 
-logging.getLogger("honeybadger").addHandler(logging.NullHandler())
+logger = logging.getLogger("honeybadger")
 
 
 class Honeybadger(object):
@@ -29,18 +30,13 @@ class Honeybadger(object):
         )
         atexit.register(self.shutdown)
 
-    def _send_notice(
-        self, exception, exc_traceback=None, context=None, fingerprint=None, tags=None
-    ):
-        payload = create_payload(
-            exception,
-            exc_traceback,
-            config=self.config,
-            context=context,
-            fingerprint=fingerprint,
-            tags=tags,
-        )
-        self._connection().send_notice(self.config, payload)
+    def _send_notice(self, notice):
+        if callable(self.config.before_notify):
+            try:
+                self.config.before_notify(notice)
+            except Exception as e:
+                logger.error("Error in before_notify callback: %s", e)
+        self._connection().send_notice(self.config, notice)
 
     def _get_context(self):
         return getattr(self.thread_local, "context", {})
@@ -52,11 +48,12 @@ class Honeybadger(object):
         self.existing_except_hook = func
         sys.excepthook = self.exception_hook
 
-    def exception_hook(self, type, value, exc_traceback):
-        context = self._get_context()
-        tags = self._construct_tags(context.get("_tags", []))
-        self._send_notice(value, exc_traceback, context=context, tags=tags)
-        self.existing_except_hook(type, value, exc_traceback)
+    def exception_hook(self, type, exception, exc_traceback):
+        notice = Notice(
+            exception=exception, thread_local=self.thread_local, config=self.config
+        )
+        self._send_notice(notice)
+        self.existing_except_hook(type, exception, exc_traceback)
 
     def shutdown(self):
         self.events_worker.shutdown()
@@ -70,27 +67,17 @@ class Honeybadger(object):
         fingerprint=None,
         tags=[],
     ):
-        if (
-            exception
-            and exception.__class__.__name__ in self.config.excluded_exceptions
-        ):
-            return  # Terminate the function
-
-        if exception is None:
-            exception = {"error_class": error_class, "error_message": error_message}
-
-        merged_context = self._get_context()
-        tags_from_context = self._construct_tags(merged_context.get("_tags", []))
-        tags_from_args = self._construct_tags(tags or [])
-
-        merged_tags = list(set(tags_from_context + tags_from_args))
-
-        if context:
-            merged_context.update(context)
-
-        return self._send_notice(
-            exception, context=merged_context, fingerprint=fingerprint, tags=merged_tags
+        notice = Notice(
+            exception=exception,
+            error_class=error_class,
+            error_message=error_message,
+            context=context,
+            fingerprint=fingerprint,
+            tags=tags,
+            thread_local=self.thread_local,
+            config=self.config,
         )
+        return self._send_notice(notice)
 
     def event(self, event_type=None, data=None, **kwargs):
         """
@@ -156,14 +143,6 @@ class Honeybadger(object):
             raise
         else:
             self.thread_local.context = original_context
-
-    def _construct_tags(self, tags):
-        constructed_tags = []
-        if isinstance(tags, str):
-            constructed_tags = [tag.strip() for tag in tags.split(",")]
-        elif isinstance(tags, list):
-            constructed_tags = tags
-        return constructed_tags
 
     def _connection(self):
         if self.config.is_dev() and not self.config.force_report_data:
