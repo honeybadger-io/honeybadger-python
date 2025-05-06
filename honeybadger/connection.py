@@ -54,7 +54,9 @@ def send_notice(config, payload):
 
 def send_events(config, payload) -> EventsSendResult:
     """
-    Send events synchronously to Honeybadger.
+    Send events synchronously to Honeybadger. This is designed to be used with
+    the EventsWorker.
+
     Returns:
       - "ok" if status == 201
       - "throttling" if status == 429

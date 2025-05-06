@@ -18,6 +18,8 @@ logging.getLogger("honeybadger").addHandler(logging.NullHandler())
 
 
 class Honeybadger(object):
+    TS_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
+
     def __init__(self):
         self.config = Configuration()
         self.thread_local = threading.local()
@@ -104,7 +106,7 @@ class Honeybadger(object):
         if "ts" not in payload:
             payload["ts"] = datetime.datetime.now(datetime.timezone.utc)
         if isinstance(payload["ts"], datetime.datetime):
-            payload["ts"] = payload["ts"].strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            payload["ts"] = payload["ts"].strftime(self.TS_FORMAT)
 
         return self.events_worker.push(payload)
 
