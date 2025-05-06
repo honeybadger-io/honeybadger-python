@@ -1,6 +1,6 @@
 from honeybadger.fake_connection import send_notice
 
-from testfixtures import log_capture
+from testfixtures import log_capture  # type: ignore
 import json
 
 
@@ -20,6 +20,6 @@ def test_send_notice_logging(l):
         (
             "honeybadger.fake_connection",
             "DEBUG",
-            "The config used is {} with payload {}".format(config, payload),
+            "[send_notice] config used is {} with payload {}".format(config, payload),
         ),
     )

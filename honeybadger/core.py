@@ -4,10 +4,13 @@ import sys
 import logging
 import copy
 import time
+import datetime
+import atexit
 
 from honeybadger.plugins import default_plugin_manager
 import honeybadger.connection as connection
 import honeybadger.fake_connection as fake_connection
+from .events_worker import EventsWorker
 from .payload import create_payload
 from .config import Configuration
 
@@ -15,10 +18,16 @@ logging.getLogger("honeybadger").addHandler(logging.NullHandler())
 
 
 class Honeybadger(object):
+    TS_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
+
     def __init__(self):
         self.config = Configuration()
         self.thread_local = threading.local()
         self.thread_local.context = {}
+        self.events_worker = EventsWorker(
+            self._connection(), self.config, logger=logging.getLogger("honeybadger")
+        )
+        atexit.register(self.shutdown)
 
     def _send_notice(
         self, exception, exc_traceback=None, context=None, fingerprint=None, tags=None
@@ -31,16 +40,7 @@ class Honeybadger(object):
             fingerprint=fingerprint,
             tags=tags,
         )
-        if self.config.is_dev() and not self.config.force_report_data:
-            return fake_connection.send_notice(self.config, payload)
-        else:
-            return connection.send_notice(self.config, payload)
-
-    def _send_event(self, payload):
-        if self.config.is_dev() and not self.config.force_report_data:
-            return fake_connection.send_event(self.config, payload)
-        else:
-            return connection.send_event(self.config, payload)
+        self._connection().send_notice(self.config, payload)
 
     def _get_context(self):
         return getattr(self.thread_local, "context", {})
@@ -57,6 +57,9 @@ class Honeybadger(object):
         tags = self._construct_tags(context.get("_tags", []))
         self._send_notice(value, exc_traceback, context=context, tags=tags)
         self.existing_except_hook(type, value, exc_traceback)
+
+    def shutdown(self):
+        self.events_worker.shutdown()
 
     def notify(
         self,
@@ -110,13 +113,19 @@ class Honeybadger(object):
 
         # Add a timestamp to the payload if not provided
         if "ts" not in payload:
-            payload["ts"] = time.time()
+            payload["ts"] = datetime.datetime.now(datetime.timezone.utc)
+        if isinstance(payload["ts"], datetime.datetime):
+            payload["ts"] = payload["ts"].strftime(self.TS_FORMAT)
 
-        return self._send_event(payload)
+        return self.events_worker.push(payload)
 
     def configure(self, **kwargs):
         self.config.set_config_from_dict(kwargs)
         self.auto_discover_plugins()
+
+        # Update events worker with new config
+        self.events_worker.connection = self._connection()
+        self.events_worker.config = self.config
 
     def auto_discover_plugins(self):
         # Avoiding circular import error
@@ -155,3 +164,9 @@ class Honeybadger(object):
         elif isinstance(tags, list):
             constructed_tags = tags
         return constructed_tags
+
+    def _connection(self):
+        if self.config.is_dev() and not self.config.force_report_data:
+            return fake_connection
+        else:
+            return connection

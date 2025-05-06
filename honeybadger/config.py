@@ -18,6 +18,12 @@ class Configuration(object):
         ("force_sync", bool),
         ("excluded_exceptions", list),
         ("report_local_variables", bool),
+        # Insights options
+        ("events_batch_size", int),
+        ("events_max_queue_size", int),
+        ("events_timeout", float),
+        ("events_max_batch_retries", int),
+        ("events_throttle_wait", float),
     )
 
     def __init__(self, *args, **kwargs):
@@ -36,6 +42,12 @@ class Configuration(object):
         self.force_sync = self.is_aws_lambda_environment
         self.excluded_exceptions = []
         self.report_local_variables = False
+
+        self.events_max_batch_retries = 3
+        self.events_max_queue_size = 10_000
+        self.events_batch_size = 1000
+        self.events_timeout = 5.0
+        self.events_throttle_wait = 60.0
 
         self.set_12factor_config()
         self.set_config_from_dict(kwargs)
