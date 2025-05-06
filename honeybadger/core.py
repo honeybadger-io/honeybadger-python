@@ -25,7 +25,7 @@ class Honeybadger(object):
         self.events_worker = EventsWorker(
             self._connection(), self.config, logger=logging.getLogger("honeybadger")
         )
-        atexit.register(self.events_worker.shutdown)
+        atexit.register(self.shutdown)
 
     def _send_notice(
         self, exception, exc_traceback=None, context=None, fingerprint=None
@@ -52,6 +52,9 @@ class Honeybadger(object):
     def exception_hook(self, type, value, exc_traceback):
         self._send_notice(value, exc_traceback, context=self._get_context())
         self.existing_except_hook(type, value, exc_traceback)
+
+    def shutdown(self):
+        self.events_worker.shutdown()
 
     def notify(
         self,
