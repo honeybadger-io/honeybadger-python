@@ -27,7 +27,7 @@ jobs:
 
       - name: Set package version in version.py
         run: |
-          echo "__version__ = '${{ inputs.version }}'" > honeybadger/version.py
+          echo "__version__ = \"${{ inputs.version }}\"" > honeybadger/version.py
           cat honeybadger/version.py
 
       - name: Update changelog

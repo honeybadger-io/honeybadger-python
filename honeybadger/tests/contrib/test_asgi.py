@@ -1,6 +1,6 @@
 import pprint
 import unittest
-from async_asgi_testclient import TestClient
+from async_asgi_testclient import TestClient  # type: ignore
 import aiounittest
 import mock
 from honeybadger import contrib
