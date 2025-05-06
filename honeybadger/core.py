@@ -30,7 +30,7 @@ class Honeybadger(object):
         atexit.register(self.shutdown)
 
     def _send_notice(
-        self, exception, exc_traceback=None, context=None, fingerprint=None
+        self, exception, exc_traceback=None, context=None, fingerprint=None, tags=None
     ):
         payload = create_payload(
             exception,
@@ -38,6 +38,7 @@ class Honeybadger(object):
             config=self.config,
             context=context,
             fingerprint=fingerprint,
+            tags=tags,
         )
         self._connection().send_notice(self.config, payload)
 
@@ -52,7 +53,9 @@ class Honeybadger(object):
         sys.excepthook = self.exception_hook
 
     def exception_hook(self, type, value, exc_traceback):
-        self._send_notice(value, exc_traceback, context=self._get_context())
+        context = self._get_context()
+        tags = self._construct_tags(context.get("_tags", []))
+        self._send_notice(value, exc_traceback, context=context, tags=tags)
         self.existing_except_hook(type, value, exc_traceback)
 
     def shutdown(self):
@@ -65,6 +68,7 @@ class Honeybadger(object):
         error_message=None,
         context={},
         fingerprint=None,
+        tags=[],
     ):
         if (
             exception
@@ -76,11 +80,16 @@ class Honeybadger(object):
             exception = {"error_class": error_class, "error_message": error_message}
 
         merged_context = self._get_context()
+        tags_from_context = self._construct_tags(merged_context.get("_tags", []))
+        tags_from_args = self._construct_tags(tags or [])
+
+        merged_tags = list(set(tags_from_context + tags_from_args))
+
         if context:
             merged_context.update(context)
 
         return self._send_notice(
-            exception, context=merged_context, fingerprint=fingerprint
+            exception, context=merged_context, fingerprint=fingerprint, tags=merged_tags
         )
 
     def event(self, event_type=None, data=None, **kwargs):
@@ -147,6 +156,14 @@ class Honeybadger(object):
             raise
         else:
             self.thread_local.context = original_context
+
+    def _construct_tags(self, tags):
+        constructed_tags = []
+        if isinstance(tags, str):
+            constructed_tags = [tag.strip() for tag in tags.split(",")]
+        elif isinstance(tags, list):
+            constructed_tags = tags
+        return constructed_tags
 
     def _connection(self):
         if self.config.is_dev() and not self.config.force_report_data:

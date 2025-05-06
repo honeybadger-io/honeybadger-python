@@ -19,7 +19,7 @@ logger = logging.getLogger("honeybadger.payload")
 MAX_CAUSE_DEPTH = 15
 
 
-def error_payload(exception, exc_traceback, config, fingerprint=None):
+def error_payload(exception, exc_traceback, config, fingerprint=None, tags=None):
     def _filename(name):
         return name.replace(config.project_root, "[PROJECT_ROOT]")
 
@@ -92,6 +92,7 @@ def error_payload(exception, exc_traceback, config, fingerprint=None):
 
     payload = prepare_exception_payload(exception)
     payload["causes"] = extract_exception_causes(exception)
+    payload["tags"] = tags or []
 
     if fingerprint is not None:
         payload["fingerprint"] = fingerprint and str(fingerprint).strip() or None
@@ -152,7 +153,12 @@ def stats_payload():
 
 
 def create_payload(
-    exception, exc_traceback=None, config=None, context=None, fingerprint=None
+    exception,
+    exc_traceback=None,
+    config=None,
+    context=None,
+    fingerprint=None,
+    tags=None,
 ):
     # if using local_variables get them
     local_variables = None
@@ -177,7 +183,7 @@ def create_payload(
             "url": "https://github.com/honeybadger-io/honeybadger-python",
             "version": __version__,
         },
-        "error": error_payload(exception, exc_traceback, config, fingerprint),
+        "error": error_payload(exception, exc_traceback, config, fingerprint, tags),
         "server": server_payload(config),
         "request": {"context": context, "local_variables": local_variables},
     }
