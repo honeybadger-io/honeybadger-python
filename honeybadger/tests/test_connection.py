@@ -27,7 +27,6 @@ def test_connection_success():
 
 
 def test_connection_returns_notice_id():
-    notice_id = str(uuid.uuid4())
     api_key = "badgerbadgermushroom"
     config = Configuration(api_key=api_key)
     notice = Notice(
@@ -38,7 +37,9 @@ def test_connection_returns_notice_id():
         assert request_object.data == b(json.dumps(notice.payload))
 
     with mock_urlopen(test_payload) as request_mock:
-        assert send_notice(config, notice) == notice.notice_id
+        assert send_notice(config, notice) == notice.payload.get("error", {}).get(
+            "token", None
+        )
 
 
 # TODO: figure out how to test logging output

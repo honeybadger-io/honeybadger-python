@@ -43,7 +43,7 @@ class Configuration(object):
         self.force_sync = self.is_aws_lambda_environment
         self.excluded_exceptions = []
         self.report_local_variables = False
-        self.before_notify = lambda notice: None
+        self.before_notify = lambda notice: notice
 
         self.events_max_batch_retries = 3
         self.events_max_queue_size = 10_000

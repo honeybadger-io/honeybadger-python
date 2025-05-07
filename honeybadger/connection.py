@@ -46,9 +46,6 @@ def _make_http_request(path, config, payload):
 
 
 def send_notice(config, notice):
-    if notice.halted:
-        return
-
     payload = notice.payload
     notice_id = payload.get("error", {}).get("token", None)
     path = "/v1/notices/"

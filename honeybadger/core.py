@@ -11,7 +11,6 @@ from honeybadger.plugins import default_plugin_manager
 import honeybadger.connection as connection
 import honeybadger.fake_connection as fake_connection
 from .events_worker import EventsWorker
-from .payload import create_payload
 from .config import Configuration
 from .notice import Notice
 
@@ -33,9 +32,18 @@ class Honeybadger(object):
     def _send_notice(self, notice):
         if callable(self.config.before_notify):
             try:
-                self.config.before_notify(notice)
+                notice = self.config.before_notify(notice)
             except Exception as e:
                 logger.error("Error in before_notify callback: %s", e)
+
+        if notice is None:
+            logger.debug("Notice was filtered out by before_notify callback")
+            return
+
+        if notice.excluded_exception():
+            logger.debug("Notice was excluded by exception filter")
+            return
+
         self._connection().send_notice(self.config, notice)
 
     def _get_context(self):

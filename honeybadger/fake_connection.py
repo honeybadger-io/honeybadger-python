@@ -4,9 +4,6 @@ logger = logging.getLogger(__name__)
 
 
 def send_notice(config, notice):
-    if notice.halted:
-        return
-
     payload = notice.payload
     notice_id = payload.get("error", {}).get("token", None)
     logger.info(
