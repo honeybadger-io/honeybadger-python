@@ -15,6 +15,7 @@ from .config import Configuration
 from .notice import Notice
 
 logger = logging.getLogger("honeybadger")
+logger.addHandler(logging.NullHandler())
 
 
 class Honeybadger(object):
