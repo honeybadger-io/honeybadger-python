@@ -7,6 +7,7 @@ class Notice(object):
         self.exception = kwargs.get("exception", None)
         self.error_class = kwargs.get("error_class", None)
         self.error_message = kwargs.get("error_message", None)
+        self.context = {}
 
         if self.exception is None:
             if self.error_class and self.error_message:
@@ -16,13 +17,15 @@ class Notice(object):
                 }
             else:
                 raise ValueError("Either exception or error_class must be provided")
+        elif self.exception and self.error_message:
+            self.context["error_message"] = self.error_message
 
         self.exc_traceback = kwargs.get("exc_traceback", None)
         self.fingerprint = kwargs.get("fingerprint", None)
         self.thread_local = kwargs.get("thread_local", None)
         self.config = kwargs.get("config", None)
 
-        self.context = self._get_thread_context()
+        self.context.update(self._get_thread_context())
         self.context.update(kwargs.get("context", {}))
 
         tags_from_context = self._construct_tags(
