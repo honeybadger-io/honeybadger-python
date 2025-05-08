@@ -36,7 +36,7 @@ class Honeybadger(object):
             except Exception as e:
                 logger.error("Error in before_notify callback: %s", e)
 
-        if notice is None:
+        if not isinstance(notice, Notice):
             logger.debug("Notice was filtered out by before_notify callback")
             return
 
