@@ -64,3 +64,11 @@ def test_is_dev_false_for_non_dev_environments():
 def test_force_report_data_not_active():
     c = Configuration()
     assert c.force_report_data == False
+
+
+def test_configure_before_notify():
+    def before_notify_callback(notice):
+        return notice
+
+    c = Configuration(before_notify=before_notify_callback)
+    assert c.before_notify == before_notify_callback

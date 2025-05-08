@@ -114,6 +114,25 @@ def test_notify_fake_connection_non_dev_environment():
             assert connection.call_count == 1
 
 
+def test_before_notify_with_none_return_value():
+    def before_notify(notice):
+        return None
+
+    hb = Honeybadger()
+    hb.configure(api_key="aaa", environment="development", before_notify=before_notify)
+    with patch(
+        "honeybadger.fake_connection.send_notice",
+        side_effect=MagicMock(return_value=True),
+    ) as fake_connection:
+        hb.notify(
+            error_class="Exception",
+            error_message="Test message.",
+            context={"foo": "bar"},
+        )
+
+        assert fake_connection.call_count == 0
+
+
 def test_notify_with_custom_params():
     def test_payload(request):
         payload = json.loads(request.data.decode("utf-8"))
@@ -241,51 +260,22 @@ def test_event_without_event_type():
     assert payload["email"] == "user@example.com"
 
 
-def test_notify_with_tags():
+def test_notify_with_before_notify_changes():
+    def before_notify(notice):
+        notice.payload["error"]["tags"] = ["tag1-updated"]
+        return notice
+
     def test_payload(request):
         payload = json.loads(request.data.decode("utf-8"))
-        assert sorted(payload["error"]["tags"]) == sorted(["tag1"])
+        assert sorted(payload["error"]["tags"]) == sorted(["tag1-updated"])
 
     hb = Honeybadger()
 
     with mock_urlopen(test_payload) as request_mock:
-        hb.configure(api_key="aaa", force_report_data=True)
+        hb.configure(api_key="aaa", force_report_data=True, before_notify=before_notify)
         hb.notify(
             error_class="Exception",
             error_message="Test.",
             context=dict(bar="foo"),
             tags="tag1",
-        )
-
-
-def test_notify_with_context_tags():
-    def test_payload(request):
-        payload = json.loads(request.data.decode("utf-8"))
-        assert sorted(payload["error"]["tags"]) == sorted(["tag1"])
-
-    hb = Honeybadger()
-
-    with mock_urlopen(test_payload) as request_mock:
-        hb.configure(api_key="aaa", force_report_data=True)
-        hb.set_context(_tags="tag1")
-        hb.notify(
-            error_class="Exception", error_message="Test.", context=dict(bar="foo")
-        )
-
-
-def test_notify_with_context_merging_tags():
-    def test_payload(request):
-        payload = json.loads(request.data.decode("utf-8"))
-        assert sorted(payload["error"]["tags"]) == sorted(["tag1", "tag2"])
-
-    hb = Honeybadger()
-
-    with mock_urlopen(test_payload) as request_mock:
-        hb.configure(api_key="aaa", force_report_data=True)
-        hb.set_context(_tags="tag1")
-        hb.notify(
-            error_class="Exception",
-            error_message="Test.",
-            context=dict(bar="foo"),
-            tags="tag2",
         )
