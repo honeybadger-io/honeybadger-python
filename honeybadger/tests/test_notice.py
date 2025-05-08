@@ -1,4 +1,5 @@
 import pytest
+import threading
 
 from honeybadger.config import Configuration
 from honeybadger.notice import Notice
@@ -68,3 +69,50 @@ def test_notice_payload():
     payload = notice.payload
     assert payload["error"]["class"] == "TestError"
     assert payload["error"]["message"] == "Test message"
+
+
+def test_notice_with_tags():
+    config = Configuration()
+
+    notice = Notice(
+        error_class="TestError",
+        error_message="Test message",
+        tags="tag1, tag2",
+        config=config,
+    )
+    payload = notice.payload
+    assert "tag1" in payload["error"]["tags"]
+    assert "tag2" in payload["error"]["tags"]
+
+
+def test_notify_with_context_tags():
+    config = Configuration()
+    thread_local = threading.local()
+    thread_local.context = {"_tags": "tag1, tag2"}
+
+    notice = Notice(
+        error_class="TestError",
+        error_message="Test message",
+        thread_local=thread_local,
+        config=config,
+    )
+    payload = notice.payload
+    assert "tag1" in payload["error"]["tags"]
+    assert "tag2" in payload["error"]["tags"]
+
+
+def test_notify_with_context_merging_tags():
+    config = Configuration()
+    thread_local = threading.local()
+    thread_local.context = {"_tags": "tag1"}
+
+    notice = Notice(
+        error_class="TestError",
+        error_message="Test message",
+        thread_local=thread_local,
+        tags="tag2",
+        config=config,
+    )
+    payload = notice.payload
+    assert "tag1" in payload["error"]["tags"]
+    assert "tag2" in payload["error"]["tags"]
