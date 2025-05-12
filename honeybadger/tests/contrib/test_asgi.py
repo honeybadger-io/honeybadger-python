@@ -50,3 +50,29 @@ class ASGIPluginTestCase(unittest.TestCase):
     async def test_should_not_notify_exception(self, hb):
         response = await self.client.get("/")
         hb.notify.assert_not_called()
+
+    @aiounittest.async_test
+    @mock.patch("honeybadger.contrib.asgi.honeybadger")
+    async def test_should_send_request_event_on_success(self, hb):
+        response = await self.client.get("/test")
+        self.assertEqual(response.status_code, 200)
+        hb.event.assert_called_once()
+        name, payload = hb.event.call_args.args
+        self.assertEqual(name, "asgi.request")
+        self.assertEqual(payload["method"], "GET")
+        self.assertEqual(payload["path"], "/test")
+        self.assertEqual(payload["status"], 200)
+        self.assertIsInstance(payload["duration"], float)
+
+    @aiounittest.async_test
+    @mock.patch("honeybadger.contrib.asgi.honeybadger")
+    async def test_should_send_request_event_on_exception(self, hb):
+        with self.assertRaises(SomeError):
+            await self.client.get("/error")
+        hb.event.assert_called_once()
+        name, payload = hb.event.call_args.args
+        self.assertEqual(name, "asgi.request")
+        self.assertEqual(payload["method"], "GET")
+        self.assertEqual(payload["path"], "/error")
+        self.assertIsNone(payload["status"])
+        self.assertIsInstance(payload["duration"], float)
