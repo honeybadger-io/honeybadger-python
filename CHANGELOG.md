@@ -4,6 +4,9 @@ CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+- Add `before_notify` hook to allow modification of notice before sending (#203)
+- Allow tags to be passed explicitly (#202)
+- Add `EventsWorker` for batching Insights events (#201)
 
 ## [0.22.1] - 2025-04-22
 - Fix: Prevent infinite loop in exception cause chains by capping traversal
