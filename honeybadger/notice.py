@@ -7,32 +7,35 @@ class Notice(object):
         self.exception = kwargs.get("exception", None)
         self.error_class = kwargs.get("error_class", None)
         self.error_message = kwargs.get("error_message", None)
-        self.context = {}
-
-        if self.exception is None:
-            if self.error_class and self.error_message:
-                self.exception = {
-                    "error_class": self.error_class,
-                    "error_message": self.error_message,
-                }
-            else:
-                raise ValueError("Either exception or error_class must be provided")
-        elif self.exception and self.error_message:
-            self.context["error_message"] = self.error_message
-
         self.exc_traceback = kwargs.get("exc_traceback", None)
         self.fingerprint = kwargs.get("fingerprint", None)
         self.thread_local = kwargs.get("thread_local", None)
         self.config = kwargs.get("config", None)
+        self.context = kwargs.get("context", {})
+        self.tags = self._construct_tags(kwargs.get("tags", []))
 
-        self.context.update(self._get_thread_context())
-        self.context.update(kwargs.get("context", {}))
+        self._process_exception()
+        self._process_context()
+        self._process_tags()
 
+    def _process_exception(self):
+        if self.exception is None and self.error_class:
+            self.exception = {
+                "error_class": self.error_class,
+            }
+            if self.error_message:
+                self.exception.update({"error_message": self.error_message})
+        elif self.exception and self.error_message:
+            self.context["error_message"] = self.error_message
+
+    def _process_context(self):
+        self.context = dict(**self._get_thread_context(), **self.context)
+
+    def _process_tags(self):
         tags_from_context = self._construct_tags(
             self._get_thread_context().get("_tags", [])
         )
-        tags_from_args = self._construct_tags(kwargs.get("tags", []))
-        self.tags = list(set(tags_from_context + tags_from_args))
+        self.tags = list(set(tags_from_context + self.tags))
 
     @cached_property
     def payload(self):
