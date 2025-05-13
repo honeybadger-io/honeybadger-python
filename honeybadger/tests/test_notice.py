@@ -5,7 +5,7 @@ from honeybadger.config import Configuration
 from honeybadger.notice import Notice
 
 
-def test_notice_initialization():
+def test_notice_initialization_with_exception():
     # Test with exception
     exception = Exception("Test exception")
     notice = Notice(exception=exception)
@@ -13,6 +13,8 @@ def test_notice_initialization():
     assert notice.error_class is None
     assert notice.error_message is None
 
+
+def test_notice_initialization_with_error_class_and_error_message():
     # Test with error_class and error_message
     notice = Notice(error_class="TestError", error_message="Test message")
     assert notice.exception == {
@@ -22,10 +24,8 @@ def test_notice_initialization():
     assert notice.error_class == "TestError"
     assert notice.error_message == "Test message"
 
-    # Test with neither exception nor error_class
-    with pytest.raises(ValueError):
-        Notice()
 
+def test_notice_initialization_with_exception_and_error_message():
     # Test with exception and error_message
     exception = Exception("Test exception")
     notice = Notice(exception=exception, error_message="Test message")

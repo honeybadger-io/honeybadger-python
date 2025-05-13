@@ -4,11 +4,13 @@ CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+- Fix: removes raising an exception in the `Notice` class.
 
 ## [0.23.0] - 2025-05-12
 - Add `before_notify` hook to allow modification of notice before sending (#203)
 - Allow tags to be passed explicitly (#202)
 - Add `EventsWorker` for batching Insights events (#201)
+- Breaking: raises an exception if neither an `exception` nor an `error_class` is passed to `honeybadger.notify()`
 
 ## [0.22.1] - 2025-04-22
 - Fix: Prevent infinite loop in exception cause chains by capping traversal
