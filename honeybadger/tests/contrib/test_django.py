@@ -246,11 +246,7 @@ class DjangoMiddlewareIntegrationTestCase(SimpleTestCase):
             self.assertTrue(request_mock.called)
 
 
-@override_settings(
-    HONEYBADGER={
-        "INSIGHTS_ENABLED": True
-    }
-)
+@override_settings(HONEYBADGER={"INSIGHTS_ENABLED": True})
 class DjangoMiddlewareEventTestCase(SimpleTestCase):
     def setUp(self):
         self.rf = RequestFactory()
