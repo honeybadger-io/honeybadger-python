@@ -1,4 +1,5 @@
 from honeybadger import honeybadger, plugins, utils
+from honeybadger.utils import get_duration
 import time
 import urllib
 import inspect
@@ -106,6 +107,7 @@ class ASGIHoneybadger(plugins.Plugin):
     def _run_asgi2(self, scope):
         async def inner(receive, send):
             return await self._run_request(scope, receive, send, self.app(scope))
+
         return inner
 
     async def _run_asgi3(self, scope, receive, send):
@@ -131,14 +133,16 @@ class ASGIHoneybadger(plugins.Plugin):
             honeybadger.notify(exception=exc, context=_as_context(scope))
             raise
         finally:
-            duration = (time.time() - start) * 1000
-            honeybadger.event("asgi.request", {
-                "method":   scope.get("method"),
-                "url":      _get_url(scope, scope.get("scheme", "http"), None),
-                "path":     scope.get("path"),
-                "status":   status,
-                "duration": duration,
-            })
+            if honeybadger.config.insights_enabled:
+                honeybadger.event(
+                    "asgi.request",
+                    {
+                        "method": scope.get("method"),
+                        "path": scope.get("path"),
+                        "status": status,
+                        "duration": get_duration(start),
+                    },
+                )
             honeybadger.reset_context()
 
     def supports(self, config, context):

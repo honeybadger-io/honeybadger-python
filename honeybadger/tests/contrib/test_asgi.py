@@ -76,3 +76,24 @@ class ASGIPluginTestCase(unittest.TestCase):
         self.assertEqual(payload["path"], "/error")
         self.assertIsNone(payload["status"])
         self.assertIsInstance(payload["duration"], float)
+
+
+class ASGIEventPayloadTestCase(unittest.TestCase):
+    def setUp(self):
+        # wrap your ASGI app in the plugin
+        app = contrib.ASGIHoneybadger(asgi_app(), api_key="abcd", insights_enabled=True)
+        self.client = TestClient(app)
+
+    @aiounittest.async_test
+    @mock.patch("honeybadger.contrib.asgi.honeybadger.event")
+    async def test_success_event_payload(self, event):
+        # even if there’s a query, url stays just the path
+        await self.client.get("/hello?x=1")
+        event.assert_called_once()
+        name, payload = event.call_args.args
+
+        self.assertEqual(name, "asgi.request")
+        self.assertEqual(payload["method"], "GET")
+        self.assertEqual(payload["path"], "/hello")
+        self.assertEqual(payload["status"], 200)
+        self.assertIsInstance(payload["duration"], float)
