@@ -277,6 +277,26 @@ That's it! For additional configuration options, keep reading.
 
 **Note:** By default, honeybadger reports errors in separate threads. For platforms that disallows threading (such as serving a flask/django app with uwsgi and disabling threading), Honeybadger will fail to report errors. You can either enable threading if you have the option, or set `force_sync` config option to `True`. This causes Honeybadger to report errors in a single thread.
 
+## Insights Automatic Instrumentation
+
+Honeybadger Insights allows you to automatically track various events in your
+application. To enable Insights automatic instrumentation, add the following to
+your configuration:
+
+```python
+honeybadger.configure(insights_enabled=True)
+```
+
+### Supported Libraries
+
+After integration with our middleware or extensions, Honeybadger will
+automatically instrument the following libraries:
+
+- Django requests & database queries
+- Flask requests & database queries
+- ASGI requests
+- Celery tasks
+
 ## Logging
 
 By default, Honeybadger uses the `logging.NullHandler` for logging so it doesn't make any assumptions about your logging setup. In Django, add a `honeybadger` section to your `LOGGING` config to enable Honeybadger logging. For example:
@@ -373,6 +393,7 @@ The following options are available to you:
 | excluded_exceptions      | `list` | `[]`                                                   | `['Http404', 'MyCustomIgnoredError']` | `HONEYBADGER_EXCLUDED_EXCEPTIONS`     |
 | force_sync               | `bool` | `False`                                                | `True`                                | `HONEYBADGER_FORCE_SYNC`              |
 | report_local_variables   | `bool` | `False`                                                | `True`                                | `HONEYBADGER_REPORT_LOCAL_VARIABLES`  |
+| insights_enabled         | `bool` | `True`                                                 | `False`                               | `HONEYBADGER_INSIGHTS_ENABLED`        |
 | events_batch_size        | `int`  | `1000`                                                 | `50`                                  | `HONEYBADGER_EVENTS_BATCH_SIZE`       |
 | events_max_queue_size    | `int`  | `10000`                                                | `5000`                                | `HONEYBADGER_EVENTS_MAX_QUEUE_SIZE`   |
 | events_timeout           | `float`| `5.0`                                                  | `1.0`                                 | `HONEYBADGER_EVENTS_TIMEOUT`          |
