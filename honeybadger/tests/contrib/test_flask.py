@@ -353,3 +353,58 @@ class FlaskHoneybadgerTestCase(unittest.TestCase):
 
         self.assert_called_with_exception_type(mock_hb, ZeroDivisionError)
         self.assertEqual(2, mock_hb.reset_context.call_count)
+
+
+class FlaskHoneybadgerInsightsTestCase(unittest.TestCase):
+    def setUp(self):
+        import flask
+
+        self.app = flask.Flask(__name__)
+        # minimal honeybadger config
+        self.app.config.update(
+            {
+                "HONEYBADGER_INSIGHTS_ENABLED": True,
+                "HONEYBADGER_API_KEY": "test",
+                "HONEYBADGER_ENVIRONMENT": "test",
+            }
+        )
+        # install the extension (hooks get registered here)
+        FlaskHoneybadger(self.app)
+
+        # a simple endpoint to drive requests
+        @self.app.route("/ping", methods=["GET", "POST"])
+        def ping():
+            return "pong", 201
+
+        self.client = self.app.test_client()
+
+    @patch("honeybadger.contrib.flask.honeybadger.event")
+    def test_insights_event_on_get(self, mock_event):
+        resp = self.client.get("/ping?foo=bar")
+        self.assertEqual(resp.status_code, 201)
+        # should fire exactly once per request
+        self.assertEqual(mock_event.call_count, 1)
+
+        name, payload = mock_event.call_args[0]
+        self.assertEqual(name, "flask.request")
+        self.assertEqual(payload["method"], "GET")
+        self.assertEqual(payload["path"], "/ping")
+        self.assertEqual(payload["status"], 201)
+        self.assertEqual(payload["view"], "ping")
+        self.assertTrue(isinstance(payload["duration"], float))
+        self.assertTrue(payload["url"].startswith("http://localhost/ping"))
+
+    @patch("honeybadger.contrib.flask.honeybadger.event")
+    def test_insights_event_on_post(self, mock_event):
+        resp = self.client.post("/ping", data={"a": "1", "b": "2"})
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(mock_event.call_count, 1)
+
+        _, payload = mock_event.call_args[0]
+        self.assertEqual(payload["method"], "POST")
+        self.assertEqual(payload["path"], "/ping")
+        # query‐string not present → still only path
+        self.assertEqual(payload["view"], "ping")
+        self.assertTrue(payload["url"].startswith("http://localhost/ping"))
+        # duration should be non‐negative
+        self.assertGreaterEqual(payload["duration"], 0.0)
