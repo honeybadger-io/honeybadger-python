@@ -168,7 +168,7 @@ class DjangoHoneybadgerMiddleware(object):
         resolver_match = getattr(request, "resolver_match", None)
         view_name = None
         view_module = None
-        component = None
+        app_name = None
 
         if resolver_match:
             view_name = getattr(resolver_match, "view_name", None)
@@ -178,7 +178,7 @@ class DjangoHoneybadgerMiddleware(object):
             if hasattr(resolver_match, "func"):
                 view_module = resolver_match.func.__module__
 
-            component = getattr(resolver_match, "app_name", None)
+            app_name = getattr(resolver_match, "app_name", None)
 
         request_data = {
             "path": request.path_info if hasattr(request, "path_info") else None,
@@ -188,7 +188,7 @@ class DjangoHoneybadgerMiddleware(object):
             ),
             "view": view_name,
             "module": view_module,
-            "component": component,
+            "app": app_name,
             "duration": get_duration(start_time),
         }
 
