@@ -1,4 +1,5 @@
 import json
+import time
 
 
 class StringReprJSONEncoder(json.JSONEncoder):
@@ -64,3 +65,22 @@ def filter_dict(data, filter_keys):
             data[key] = filter_dict(data[key], filter_keys)
 
     return data
+
+
+PREFIX = "HONEYBADGER_"
+
+
+def extract_honeybadger_config(kwargs):
+    return {
+        key[len(PREFIX) :].lower(): value
+        for key, value in kwargs.items()
+        if key.startswith(PREFIX)
+    }
+
+
+def get_duration(start_time):
+    """Get the duration in milliseconds since start_time."""
+    if start_time is None:
+        return None
+
+    return round((time.time() - start_time) * 1000, 4)
