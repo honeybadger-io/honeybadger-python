@@ -125,9 +125,10 @@ class CeleryHoneybadger(object):
                 "task_name": task.name,
                 "retries": task.request.retries,
                 "group": task.request.group,
-                "args": kwargs["args"],
-                "kwargs": kwargs["kwargs"],
                 "state": kwargs["state"],
+                # TODO: allow filtering before sending args
+                # "args": kwargs["args"],
+                # "kwargs": kwargs["kwargs"],
             }
 
             kwargs["task"].send_event("task-finished", payload=payload)
