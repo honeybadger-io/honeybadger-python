@@ -80,4 +80,7 @@ def extract_honeybadger_config(kwargs):
 
 def get_duration(start_time):
     """Get the duration in milliseconds since start_time."""
+    if start_time is None:
+        return None
+
     return round((time.time() - start_time) * 1000, 4)

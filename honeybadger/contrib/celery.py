@@ -1,8 +1,9 @@
 import threading
+import time
 
 from honeybadger import honeybadger
 from honeybadger.plugins import Plugin, default_plugin_manager
-from honeybadger.utils import extract_honeybadger_config
+from honeybadger.utils import extract_honeybadger_config, get_duration
 
 _listener_started = False
 
@@ -65,8 +66,9 @@ class CeleryHoneybadger(object):
         """
         Initialize honeybadger and listen for errors.
         """
-        from celery.signals import task_failure, task_postrun, worker_ready
+        from celery.signals import task_failure, task_postrun, task_prerun, worker_ready
 
+        self._task_starts = {}
         self._initialize_honeybadger(self.app.conf)
 
         if self.report_exceptions:
@@ -77,6 +79,7 @@ class CeleryHoneybadger(object):
             # Enable task events, as we need to listen to
             # task-finished events
             self.app.conf.worker_send_task_events = True
+            task_prerun.connect(self._on_task_prerun, weak=False)
             worker_ready.connect(self._start_task_event_listener, weak=False)
 
     def _initialize_honeybadger(self, config):
@@ -114,24 +117,28 @@ class CeleryHoneybadger(object):
     def _on_task_finished(self, payload, **kwargs):
         honeybadger.event("celery.task_finished", payload["payload"])
 
-    def _on_task_postrun(self, *args, **kwargs):
+    def _on_task_prerun(self, task_id=None, task=None, *args, **kwargs):
+        self._task_starts[task_id] = time.time()
+
+    def _on_task_postrun(self, task_id=None, task=None, *args, **kwargs):
         """
         Callback executed after a task is finished.
         """
+
         if honeybadger.config.insights_enabled:
-            task = kwargs["task"]
             payload = {
-                "task_id": kwargs["task_id"],
+                "task_id": task_id,
                 "task_name": task.name,
                 "retries": task.request.retries,
                 "group": task.request.group,
                 "state": kwargs["state"],
+                "duration": get_duration(self._task_starts.pop(task_id, None)),
                 # TODO: allow filtering before sending args
                 # "args": kwargs["args"],
                 # "kwargs": kwargs["kwargs"],
             }
 
-            kwargs["task"].send_event("task-finished", payload=payload)
+            task.send_event("task-finished", payload=payload)
 
         honeybadger.reset_context()
 
@@ -152,8 +159,9 @@ class CeleryHoneybadger(object):
             task_failure.disconnect(self._on_task_failure)
 
         if honeybadger.config.insights_enabled:
-            from celery.signals import worker_ready
+            from celery.signals import worker_ready, task_prerun
 
+            task_prerun.disconnect(self._on_task_prerun)
             worker_ready.disconnect(self._start_task_event_listener)
 
         if hasattr(self, "_listen_thread"):

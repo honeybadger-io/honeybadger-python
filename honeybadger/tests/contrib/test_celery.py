@@ -20,12 +20,12 @@ def test_notify_from_task_failure(notify, reset_context):
     hb = CeleryHoneybadger(app, report_exceptions=True)
 
     # Send task_failure event
-    task_failure.send(sender=app, task_name="tasks.add", exception=exception)
+    task_failure.send(sender=app, task_id="hi", task_name="tasks.add", exception=exception)
 
     assert notify.call_count == 1
     assert notify.call_args[1]["exception"] == exception
 
-    task_postrun.send(sender=app, task_name="tasks.add", task={})
+    task_postrun.send(sender=app, task_id="hi", task_name="tasks.add", task={})
 
     assert reset_context.call_count == 1
     hb.tearDown()
