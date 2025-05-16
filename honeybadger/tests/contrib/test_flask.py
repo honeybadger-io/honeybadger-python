@@ -392,7 +392,6 @@ class FlaskHoneybadgerInsightsTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], 201)
         self.assertEqual(payload["view"], "ping")
         self.assertTrue(isinstance(payload["duration"], float))
-        self.assertTrue(payload["url"].startswith("http://localhost/ping"))
 
     @patch("honeybadger.contrib.flask.honeybadger.event")
     def test_insights_event_on_post(self, mock_event):
@@ -405,6 +404,5 @@ class FlaskHoneybadgerInsightsTestCase(unittest.TestCase):
         self.assertEqual(payload["path"], "/ping")
         # query‐string not present → still only path
         self.assertEqual(payload["view"], "ping")
-        self.assertTrue(payload["url"].startswith("http://localhost/ping"))
         # duration should be non‐negative
         self.assertGreaterEqual(payload["duration"], 0.0)

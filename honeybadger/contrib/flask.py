@@ -216,11 +216,11 @@ class FlaskHoneybadger(object):
         honeybadger.event(
             "flask.request",
             {
-                "url": request.url,
                 "path": request.path,
                 "method": request.method,
                 "status": response.status_code,
                 "view": request.endpoint,
+                "blueprint": request.blueprint,
                 "duration": get_duration(start),
             },
         )
