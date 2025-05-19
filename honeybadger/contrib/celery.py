@@ -27,7 +27,8 @@ class CeleryPlugin(Plugin):
         """
         Generate payload by checking celery task object.
         :param context: current context.
-        :param config: honeybadger configuration. :return: a dict with the generated payload.
+        :param config: honeybadger configuration.
+        :return: a dict with the generated payload.
         """
         from celery import current_task
 

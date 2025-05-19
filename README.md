@@ -393,7 +393,7 @@ The following options are available to you:
 | excluded_exceptions      | `list` | `[]`                                                   | `['Http404', 'MyCustomIgnoredError']` | `HONEYBADGER_EXCLUDED_EXCEPTIONS`     |
 | force_sync               | `bool` | `False`                                                | `True`                                | `HONEYBADGER_FORCE_SYNC`              |
 | report_local_variables   | `bool` | `False`                                                | `True`                                | `HONEYBADGER_REPORT_LOCAL_VARIABLES`  |
-| insights_enabled         | `bool` | `True`                                                 | `False`                               | `HONEYBADGER_INSIGHTS_ENABLED`        |
+| insights_enabled         | `bool` | `False`                                                | `True`                                | `HONEYBADGER_INSIGHTS_ENABLED`        |
 | events_batch_size        | `int`  | `1000`                                                 | `50`                                  | `HONEYBADGER_EVENTS_BATCH_SIZE`       |
 | events_max_queue_size    | `int`  | `10000`                                                | `5000`                                | `HONEYBADGER_EVENTS_MAX_QUEUE_SIZE`   |
 | events_timeout           | `float`| `5.0`                                                  | `1.0`                                 | `HONEYBADGER_EVENTS_TIMEOUT`          |
