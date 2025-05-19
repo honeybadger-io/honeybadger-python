@@ -244,3 +244,47 @@ class DjangoMiddlewareIntegrationTestCase(SimpleTestCase):
             except:
                 pass
             self.assertTrue(request_mock.called)
+
+
+@override_settings(HONEYBADGER={"INSIGHTS_ENABLED": True})
+class DjangoMiddlewareEventTestCase(SimpleTestCase):
+    def setUp(self):
+        self.rf = RequestFactory()
+        # point at your URLconf so resolver_match works
+        self.url = re_path(r"plain_view/?$", plain_view, name="plain_view")
+
+    def tearDown(self):
+        clear_request()
+
+    @patch("honeybadger.contrib.django.honeybadger.event")
+    def test_event_sent_on_successful_request(self, mock_event):
+        # arrange
+        request = self.rf.get("/plain_view/")
+        request.resolver_match = self.url.resolve("plain_view")
+        # force a known status code
+        response = Mock(status_code=418)
+        mw = DjangoHoneybadgerMiddleware(lambda req: response)
+
+        # act
+        mw(request)
+
+        # assert
+        mock_event.assert_called_once()
+        event_name, data = mock_event.call_args[0]
+        self.assertEqual(event_name, "django.request")
+        self.assertEqual(data["method"], "GET")
+        self.assertEqual(data["status"], 418)
+        self.assertEqual(data["path"], "/plain_view/")
+        self.assertEqual(data["view"], "plain_view")
+        # duration should be a float > 0
+        self.assertIsInstance(data["duration"], float)
+        self.assertGreater(data["duration"], 0)
+
+    @patch("honeybadger.contrib.django.honeybadger.event")
+    def test_no_request_left_in_thread_locals(self, mock_event):
+        # ensure that clear_request() always runs
+        request = self.rf.get("/plain_view/")
+        request.resolver_match = self.url.resolve("plain_view")
+        mw = DjangoHoneybadgerMiddleware(lambda req: Mock())
+        mw(request)
+        self.assertIsNone(current_request())

@@ -1,4 +1,6 @@
 from honeybadger import honeybadger, plugins, utils
+from honeybadger.utils import get_duration
+import time
 import urllib
 import inspect
 import asyncio
@@ -104,22 +106,43 @@ class ASGIHoneybadger(plugins.Plugin):
 
     def _run_asgi2(self, scope):
         async def inner(receive, send):
-            return await self._run_app(scope, lambda: self.app(scope)(receive, send))
+            return await self._run_request(scope, receive, send, self.app(scope))
 
         return inner
 
     async def _run_asgi3(self, scope, receive, send):
-        return await self._run_app(scope, lambda: self.app(scope, receive, send))
+        return await self._run_request(
+            scope, receive, send, lambda recv, snd: self.app(scope, recv, snd)
+        )
 
-    async def _run_app(self, scope, callback):
+    async def _run_request(self, scope, receive, send, app_callable):
         # TODO: Should we check recursive middleware stacks?
         # See: https://github.com/getsentry/sentry-python/blob/master/sentry_sdk/integrations/asgi.py#L112
+        start = time.time()
+        status = None
+
+        async def send_wrapper(message):
+            nonlocal status
+            if message.get("type") == "http.response.start":
+                status = message.get("status")
+            await send(message)
+
         try:
-            return await callback()
+            return await app_callable(receive, send_wrapper)
         except Exception as exc:
             honeybadger.notify(exception=exc, context=_as_context(scope))
-            raise exc from None
+            raise
         finally:
+            if honeybadger.config.insights_enabled:
+                honeybadger.event(
+                    "asgi.request",
+                    {
+                        "method": scope.get("method"),
+                        "path": scope.get("path"),
+                        "status": status,
+                        "duration": get_duration(start),
+                    },
+                )
             honeybadger.reset_context()
 
     def supports(self, config, context):

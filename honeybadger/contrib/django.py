@@ -1,17 +1,17 @@
 from __future__ import absolute_import
 import re
+import time
 
 from six import iteritems
 
 from honeybadger import honeybadger
 from honeybadger.plugins import Plugin, default_plugin_manager
-from honeybadger.utils import filter_dict, filter_env_vars
+from honeybadger.utils import filter_dict, filter_env_vars, get_duration
 
 try:
     from threading import local  # type: ignore[no-redef]
 except ImportError:
     from django.utils._threading_local import local  # type: ignore[no-redef,import]
-
 
 _thread_locals = local()
 
@@ -130,17 +130,69 @@ class DjangoHoneybadgerMiddleware(object):
         honeybadger.configure(**config_kwargs)
         honeybadger.config.set_12factor_config()  # environment should override Django settings
         default_plugin_manager.register(DjangoPlugin())
+        if honeybadger.config.insights_enabled:
+            self._patch_cursor()
 
     def __call__(self, request):
         set_request(request)
+        start_time = time.time()
         honeybadger.begin_request(request)
-
         response = self.get_response(request)
+
+        if honeybadger.config.insights_enabled:
+            self._send_request_event(request, response, start_time)
 
         honeybadger.reset_context()
         clear_request()
 
         return response
+
+    def _patch_cursor(self):
+        from django.db.backends.utils import CursorWrapper
+
+        orig_exec = CursorWrapper.execute
+
+        def hb_execute(self, sql, params=None):
+            start = time.time()
+            try:
+                return orig_exec(self, sql, params)
+            finally:
+                honeybadger.event(
+                    "db.query", {"query": sql, "duration": get_duration(start)}
+                )
+
+        CursorWrapper.execute = hb_execute
+
+    def _send_request_event(self, request, response, start_time):
+        # Get resolver data
+        resolver_match = getattr(request, "resolver_match", None)
+        view_name = None
+        view_module = None
+        app_name = None
+
+        if resolver_match:
+            view_name = getattr(resolver_match, "view_name", None)
+            if not view_name and hasattr(resolver_match, "func"):
+                view_name = resolver_match.func.__name__
+
+            if hasattr(resolver_match, "func"):
+                view_module = resolver_match.func.__module__
+
+            app_name = getattr(resolver_match, "app_name", None)
+
+        request_data = {
+            "path": request.path_info if hasattr(request, "path_info") else None,
+            "method": request.method if hasattr(request, "method") else None,
+            "status": (
+                response.status_code if hasattr(response, "status_code") else None
+            ),
+            "view": view_name,
+            "module": view_module,
+            "app": app_name,
+            "duration": get_duration(start_time),
+        }
+
+        honeybadger.event("django.request", request_data)
 
     def process_exception(self, request, exception):
         self.__set_user_from_context(request)
