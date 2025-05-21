@@ -3,7 +3,10 @@ from mock import patch
 from mock import DEFAULT
 import six
 import time
+from functools import wraps
 from threading import Event
+from honeybadger import honeybadger
+from honeybadger.config import Configuration
 
 
 @contextmanager
@@ -21,3 +24,26 @@ def mock_urlopen(func, status=201):
         mock_called_event.wait(0.5)
         ((request_object,), mock_kwargs) = request_mock.call_args
         func(request_object)
+
+
+def with_config(config):
+    """
+    Decorator to set honeybadger.config for a test, and restore it after.
+    Usage:
+        @with_config({"a": "b"})
+        def test_...():
+            ...
+    """
+
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            honeybadger.configure(**config)
+            try:
+                return fn(*args, **kwargs)
+            finally:
+                honeybadger.config = Configuration()
+
+        return wrapper
+
+    return decorator

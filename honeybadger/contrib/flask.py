@@ -12,6 +12,7 @@ from honeybadger.utils import (
     get_duration,
     extract_honeybadger_config,
 )
+from honeybadger.contrib.db import DBHoneybadger
 from six import iteritems
 
 logger = logging.getLogger(__name__)
@@ -208,22 +209,48 @@ class FlaskHoneybadger(object):
         )
 
     def _handle_request_finished(self, sender, *args, **kwargs):
+        if honeybadger.config.insights_config.flask.disabled:
+            return
+
         info = _request_info.get({})
         request = info.get("request")
         start = info.get("start_time")
         response = kwargs.get("response")
 
-        honeybadger.event(
-            "flask.request",
-            {
-                "path": request.path,
-                "method": request.method,
-                "status": response.status_code,
-                "view": request.endpoint,
-                "blueprint": request.blueprint,
-                "duration": get_duration(start),
-            },
-        )
+        payload = {
+            "path": request.path,
+            "method": request.method,
+            "status": response.status_code,
+            "view": request.endpoint,
+            "blueprint": request.blueprint,
+            "duration": get_duration(start),
+        }
+
+        if honeybadger.config.insights_config.flask.include_params:
+            params = {}
+
+            # Add query params (from URL)
+            for key in request.args:
+                values = request.args.getlist(key)
+                params[key] = values[0] if len(values) == 1 else values
+
+            # Add form params (from POST body)
+            for key in request.form:
+                values = request.form.getlist(key)
+                # Combine with existing values if key present
+                if key in params:
+                    existing = (
+                        params[key] if isinstance(params[key], list) else [params[key]]
+                    )
+                    params[key] = existing + values
+                else:
+                    params[key] = values[0] if len(values) == 1 else values
+
+            payload["params"] = filter_dict(
+                params, honeybadger.config.params_filters, remove_keys=True
+            )
+
+        honeybadger.event("flask.request", payload)
 
         _request_info.set({})
 
@@ -261,6 +288,4 @@ class FlaskHoneybadger(object):
 
         @event.listens_for(Engine, "after_cursor_execute", propagate=True)
         def _after(conn, cursor, stmt, params, ctx, executemany):
-            honeybadger.event(
-                "db.query", {"query": stmt, "duration": get_duration(ctx._hb_start)}
-            )
+            DBHoneybadger.execute(stmt, ctx._hb_start, params)

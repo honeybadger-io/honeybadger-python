@@ -7,6 +7,7 @@ from six import iteritems
 from honeybadger import honeybadger
 from honeybadger.plugins import Plugin, default_plugin_manager
 from honeybadger.utils import filter_dict, filter_env_vars, get_duration
+from honeybadger.contrib.db import DBHoneybadger
 
 try:
     from threading import local  # type: ignore[no-redef]
@@ -139,7 +140,10 @@ class DjangoHoneybadgerMiddleware(object):
         honeybadger.begin_request(request)
         response = self.get_response(request)
 
-        if honeybadger.config.insights_enabled:
+        if (
+            honeybadger.config.insights_enabled
+            and not honeybadger.config.insights_config.django.disabled
+        ):
             self._send_request_event(request, response, start_time)
 
         honeybadger.reset_context()
@@ -151,17 +155,7 @@ class DjangoHoneybadgerMiddleware(object):
         from django.db.backends.utils import CursorWrapper
 
         orig_exec = CursorWrapper.execute
-
-        def hb_execute(self, sql, params=None):
-            start = time.time()
-            try:
-                return orig_exec(self, sql, params)
-            finally:
-                honeybadger.event(
-                    "db.query", {"query": sql, "duration": get_duration(start)}
-                )
-
-        CursorWrapper.execute = hb_execute
+        CursorWrapper.execute = DBHoneybadger.django_execute(orig_exec)
 
     def _send_request_event(self, request, response, start_time):
         # Get resolver data
@@ -191,6 +185,17 @@ class DjangoHoneybadgerMiddleware(object):
             "app": app_name,
             "duration": get_duration(start_time),
         }
+
+        if honeybadger.config.insights_config.django.include_params:
+            params = {}
+            for qd in [request.GET, request.POST]:
+                for key in qd:
+                    values = qd.getlist(key)
+                    params[key] = values[0] if len(values) == 1 else values
+            filtered = filter_dict(
+                params, honeybadger.config.params_filters, remove_keys=True
+            )
+            request_data["params"] = filtered
 
         honeybadger.event("django.request", request_data)
 

@@ -37,10 +37,18 @@ def test_config_bool_types_are_accurate():
 
 
 def test_can_only_set_valid_options():
-    c = Configuration(foo="bar")
-    with pytest.raises(AttributeError):
-        # pylint: disable-next=no-member
-        print(c.foo)
+    with pytest.raises(
+        AttributeError, match="Unknown configuration option\\(s\\): foo"
+    ):
+        Configuration(foo="bar")
+
+
+def test_is_okay_with_unknown_env_var():
+    os.environ["HONEYBADGER_FOO"] = "bar"
+    try:
+        Configuration()
+    except Exception:
+        pytest.fail("Configuration() raised an exception with unknown env var")
 
 
 def test_valid_dev_environments():
@@ -72,3 +80,27 @@ def test_configure_before_notify():
 
     c = Configuration(before_notify=before_notify_callback)
     assert c.before_notify == before_notify_callback
+
+
+def test_configure_nested_insights_config():
+    c = Configuration(insights_config={"db": {"disabled": True}})
+    assert c.insights_config.db.disabled == True
+
+
+def test_configure_throws_for_invalid_insights_config():
+    with pytest.raises(AttributeError):
+        Configuration(insights_config={"foo": "bar"})
+
+
+def test_configure_merges_insights_config():
+    c = Configuration(api_key="test", insights_config={})
+
+    c.set_config_from_dict({"insights_config": {"db": {"include_params": True}}})
+    assert hasattr(c.insights_config, "db")
+    assert c.insights_config.db.include_params is True
+
+    c.set_config_from_dict({"insights_config": {"celery": {"disabled": True}}})
+    assert hasattr(c.insights_config, "celery")
+    assert c.insights_config.celery.disabled is True
+
+    assert c.insights_config.db.include_params is True

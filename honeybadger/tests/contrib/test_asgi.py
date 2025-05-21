@@ -3,7 +3,10 @@ import unittest
 from async_asgi_testclient import TestClient  # type: ignore
 import aiounittest
 import mock
+
+from honeybadger import honeybadger
 from honeybadger import contrib
+from honeybadger.config import Configuration
 
 
 class SomeError(Exception):
@@ -83,6 +86,10 @@ class ASGIEventPayloadTestCase(unittest.TestCase):
         # wrap your ASGI app in the plugin
         app = contrib.ASGIHoneybadger(asgi_app(), api_key="abcd", insights_enabled=True)
         self.client = TestClient(app)
+
+    def tearDown(self):
+        # reset the honeybadger config
+        honeybadger.config = Configuration()
 
     @aiounittest.async_test
     @mock.patch("honeybadger.contrib.asgi.honeybadger.event")
