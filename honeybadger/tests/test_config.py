@@ -51,6 +51,19 @@ def test_is_okay_with_unknown_env_var():
         pytest.fail("Configuration() raised an exception with unknown env var")
 
 
+def test_nested_dataclass_raises_for_invalid_key():
+    c = Configuration(insights_config={})
+    with pytest.raises(AttributeError, match="Unknown DBConfig option"):
+        # “bogus” isn’t a valid field on insights_config.db
+        c.set_config_from_dict({"insights_config": {"db": {"bogus": True}}})
+
+
+def test_set_config_from_dict_raises_for_unknown_key():
+    c = Configuration()
+    with pytest.raises(AttributeError, match="Unknown configuration option"):
+        c.set_config_from_dict({"does_not_exist": 123})
+
+
 def test_valid_dev_environments():
     valid_dev_environments = ["development", "dev", "test"]
 

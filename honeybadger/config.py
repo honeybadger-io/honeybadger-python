@@ -99,14 +99,16 @@ class BaseConfig:
     events_throttle_wait: float = 60.0
 
 
+def _ensure_no_unknown(opts: Dict[str, Any], allowed: set[str], ctx: str):
+    unknown = set(opts) - allowed
+    if unknown:
+        raise AttributeError(f"Unknown {ctx} option(s): {', '.join(sorted(unknown))}")
+
+
 class Configuration(BaseConfig):
     def __init__(self, **kwargs):
         valid_fields = {f.name for f in fields(self)}
-        unknown = set(kwargs) - valid_fields
-        if unknown:
-            raise AttributeError(
-                f"Unknown configuration option(s): {', '.join(sorted(unknown))}"
-            )
+        _ensure_no_unknown(kwargs, valid_fields, "configuration")
 
         for k, v in list(kwargs.items()):
             field_info = next((f for f in fields(type(self)) if f.name == k), None)
@@ -137,8 +139,9 @@ class Configuration(BaseConfig):
 
     def set_config_from_dict(self, config: Dict[str, Any]):
         for k, v in config.items():
-            if not hasattr(self, k):
-                raise AttributeError(f"Unknown configuration option: {k}")
+            valid = {f.name for f in fields(self)}
+            _ensure_no_unknown(config, valid, "configuration")
+
             current_val = getattr(self, k)
             # If current_val is a dataclass and v is a dict, merge recursively
             if hasattr(current_val, "__dataclass_fields__") and isinstance(v, dict):
@@ -167,11 +170,7 @@ def dataclass_from_dict(klass, d):
     if not is_dataclass(klass):
         return d
     allowed = {f.name for f in fields(klass)}
-    unknown = set(d) - allowed
-    if unknown:
-        raise AttributeError(
-            f"Unknown configuration option(s) for {klass.__name__}: {', '.join(sorted(unknown))}"
-        )
+    _ensure_no_unknown(d, allowed, klass.__name__)
     kwargs = {}
     for f in fields(klass):
         if f.name in d:
