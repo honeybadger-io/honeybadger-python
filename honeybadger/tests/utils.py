@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 from mock import patch
 from mock import DEFAULT
+import inspect
 import six
 import time
 from functools import wraps
@@ -36,13 +37,25 @@ def with_config(config):
     """
 
     def decorator(fn):
-        @wraps(fn)
-        def wrapper(*args, **kwargs):
-            honeybadger.configure(**config)
-            try:
-                return fn(*args, **kwargs)
-            finally:
-                honeybadger.config = Configuration()
+        if inspect.iscoroutinefunction(fn):
+
+            @wraps(fn)
+            async def wrapper(*args, **kwargs):
+                honeybadger.configure(**config)
+                try:
+                    return await fn(*args, **kwargs)
+                finally:
+                    honeybadger.config = Configuration()
+
+        else:
+
+            @wraps(fn)
+            def wrapper(*args, **kwargs):
+                honeybadger.configure(**config)
+                try:
+                    return fn(*args, **kwargs)
+                finally:
+                    honeybadger.config = Configuration()
 
         return wrapper
 

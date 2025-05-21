@@ -52,6 +52,12 @@ class FlaskConfig:
 
 
 @dataclass
+class ASGIConfig:
+    disabled: bool = False
+    include_params: bool = False
+
+
+@dataclass
 class CeleryConfig:
     disabled: bool = False
     exclude_tasks: List[Union[str, Pattern]] = field(default_factory=list)
@@ -64,6 +70,7 @@ class InsightsConfig:
     django: DjangoConfig = field(default_factory=DjangoConfig)
     flask: FlaskConfig = field(default_factory=FlaskConfig)
     celery: CeleryConfig = field(default_factory=CeleryConfig)
+    asgi: ASGIConfig = field(default_factory=ASGIConfig)
 
 
 @dataclass

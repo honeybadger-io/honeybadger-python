@@ -133,16 +133,30 @@ class ASGIHoneybadger(plugins.Plugin):
             honeybadger.notify(exception=exc, context=_as_context(scope))
             raise
         finally:
-            if honeybadger.config.insights_enabled:
-                honeybadger.event(
-                    "asgi.request",
-                    {
-                        "method": scope.get("method"),
-                        "path": scope.get("path"),
-                        "status": status,
-                        "duration": get_duration(start),
-                    },
-                )
+            asgi_config = honeybadger.config.insights_config.asgi
+            if honeybadger.config.insights_enabled and not asgi_config.disabled:
+                payload = {
+                    "method": scope.get("method"),
+                    "path": scope.get("path"),
+                    "status": status,
+                    "duration": get_duration(start),
+                }
+
+                if asgi_config.include_params:
+                    raw_qs = scope.get("query_string", b"")
+                    params = {}
+                    if raw_qs:
+                        parsed = urllib.parse.parse_qs(raw_qs.decode())
+                        for key, values in parsed.items():
+                            params[key] = values[0] if len(values) == 1 else values
+
+                    payload["params"] = utils.filter_dict(
+                        params,
+                        honeybadger.config.params_filters,
+                        remove_keys=True,
+                    )
+
+                honeybadger.event("asgi.request", payload)
             honeybadger.reset_context()
 
     def supports(self, config, context):

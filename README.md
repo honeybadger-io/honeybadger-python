@@ -327,7 +327,22 @@ The following instrumentation configs are available:
             "flask": {
                 # Disable instrumentation for Flask, defaults to False
                 "disabled": True,
-                # include GET/POST params in events, defaults to False
+                # Include GET/POST params in events, defaults to False
+                "params_enabled": True,
+            }
+        }
+    )
+```
+
+#### ASGI
+
+```python
+    honeybadger.configure(
+        insights_config={
+            "asgi": {
+                # Disable instrumentation for ASGI, defaults to False
+                "disabled": True,
+                # Include query params in events, defaults to False
                 "params_enabled": True,
             }
         }
