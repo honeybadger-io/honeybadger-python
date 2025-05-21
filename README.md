@@ -311,7 +311,7 @@ The following instrumentation configs are available:
         insights_config={
             "django": {
                 # Disable instrumentation for Flask, defaults to False
-                "disable": True,
+                "disabled": True,
                 # include GET/POST params in events, defaults to False
                 "include_params": True,
             }
@@ -328,7 +328,7 @@ The following instrumentation configs are available:
                 # Disable instrumentation for Flask, defaults to False
                 "disabled": True,
                 # Include GET/POST params in events, defaults to False
-                "params_enabled": True,
+                "include_params": True,
             }
         }
     )
@@ -343,7 +343,7 @@ The following instrumentation configs are available:
                 # Disable instrumentation for ASGI, defaults to False
                 "disabled": True,
                 # Include query params in events, defaults to False
-                "params_enabled": True,
+                "include_params": True,
             }
         }
     )
