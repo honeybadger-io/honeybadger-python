@@ -1,9 +1,12 @@
 import os
 import socket
 import re
+import logging
 
 from dataclasses import is_dataclass, dataclass, field, fields, MISSING
 from typing import List, Callable, Any, Dict, Optional, ClassVar, Union, Pattern, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 def default_excluded_queries() -> List[Union[str, Pattern[Any]]]:
@@ -106,23 +109,9 @@ class BaseConfig:
     events_throttle_wait: float = 60.0
 
 
-def _ensure_no_unknown(opts: Dict[str, Any], allowed: set[str], ctx: str):
-    unknown = set(opts) - allowed
-    if unknown:
-        raise AttributeError(f"Unknown {ctx} option(s): {', '.join(sorted(unknown))}")
-
-
 class Configuration(BaseConfig):
     def __init__(self, **kwargs):
-        valid_fields = {f.name for f in fields(self)}
-        _ensure_no_unknown(kwargs, valid_fields, "configuration")
-
-        for k, v in list(kwargs.items()):
-            field_info = next((f for f in fields(type(self)) if f.name == k), None)
-            if field_info and is_dataclass(field_info.type) and isinstance(v, dict):
-                kwargs[k] = dataclass_from_dict(field_info.type, v)
-
-        super().__init__(**kwargs)
+        super().__init__()
         self.set_12factor_config()
         self.set_config_from_dict(kwargs)
 
@@ -145,10 +134,8 @@ class Configuration(BaseConfig):
                     pass
 
     def set_config_from_dict(self, config: Dict[str, Any]):
-        for k, v in config.items():
-            valid = {f.name for f in fields(self)}
-            _ensure_no_unknown(config, valid, "configuration")
-
+        filtered = filter_and_warn_unknown(config, self.__class__)
+        for k, v in filtered.items():
             current_val = getattr(self, k)
             # If current_val is a dataclass and v is a dict, merge recursively
             if hasattr(current_val, "__dataclass_fields__") and isinstance(v, dict):
@@ -182,14 +169,33 @@ class Configuration(BaseConfig):
         return os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not None
 
 
+def filter_and_warn_unknown(opts: dict[str, Any], schema: Any) -> dict[str, Any]:
+    if is_dataclass(schema):
+        if isinstance(schema, type):  # It's a class
+            schema_name = schema.__name__
+        else:  # It's an instance
+            schema_name = type(schema).__name__
+        allowed = {f.name for f in fields(schema)}
+    else:
+        raise TypeError(f"Expected a dataclass type or instance, got: {schema!r}")
+
+    unknown = set(opts) - allowed
+    if unknown:
+        logger.warning(
+            "Unknown %s option(s): %s",
+            schema_name,
+            ", ".join(sorted(unknown)),
+        )
+    return {k: opts[k] for k in opts.keys() & allowed}
+
+
 def dataclass_from_dict(klass, d):
     """
     Recursively build a dataclass instance from a dict.
     """
     if not is_dataclass(klass):
         return d
-    allowed = {f.name for f in fields(klass)}
-    _ensure_no_unknown(d, allowed, klass.__name__)
+    filtered = filter_and_warn_unknown(d, klass)
     kwargs = {}
     for f in fields(klass):
         if f.name in d:

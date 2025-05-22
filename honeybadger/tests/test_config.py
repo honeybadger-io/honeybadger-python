@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import os
 import pytest
+import logging
 
 from honeybadger.config import Configuration
 
@@ -36,11 +37,15 @@ def test_config_bool_types_are_accurate():
     assert c.force_report_data == True
 
 
-def test_can_only_set_valid_options():
-    with pytest.raises(
-        AttributeError, match="Unknown configuration option\\(s\\): foo"
-    ):
-        Configuration(foo="bar")
+def test_can_only_set_valid_options(caplog):
+    with caplog.at_level(logging.WARNING):
+        try:
+            Configuration(foo="bar")
+        except AttributeError:
+            pass
+    assert any(
+        "Unknown Configuration option" in msg for msg in caplog.text.splitlines()
+    )
 
 
 def test_is_okay_with_unknown_env_var():
@@ -48,20 +53,23 @@ def test_is_okay_with_unknown_env_var():
     try:
         Configuration()
     except Exception:
-        pytest.fail("Configuration() raised an exception with unknown env var")
+        pytest.fail("This should fail silently.")
 
 
-def test_nested_dataclass_raises_for_invalid_key():
+def test_nested_dataclass_raises_for_invalid_key(caplog):
     c = Configuration(insights_config={})
-    with pytest.raises(AttributeError, match="Unknown DBConfig option"):
-        # “bogus” isn’t a valid field on insights_config.db
+    with caplog.at_level(logging.WARNING):
         c.set_config_from_dict({"insights_config": {"db": {"bogus": True}}})
+    assert any("Unknown DBConfig option" in msg for msg in caplog.text.splitlines())
 
 
-def test_set_config_from_dict_raises_for_unknown_key():
+def test_set_config_from_dict_raises_for_unknown_key(caplog):
     c = Configuration()
-    with pytest.raises(AttributeError, match="Unknown configuration option"):
+    with caplog.at_level(logging.WARNING):
         c.set_config_from_dict({"does_not_exist": 123})
+    assert any(
+        "Unknown Configuration option" in msg for msg in caplog.text.splitlines()
+    )
 
 
 def test_valid_dev_environments():
@@ -100,9 +108,12 @@ def test_configure_nested_insights_config():
     assert c.insights_config.db.disabled == True
 
 
-def test_configure_throws_for_invalid_insights_config():
-    with pytest.raises(AttributeError):
+def test_configure_throws_for_invalid_insights_config(caplog):
+    with caplog.at_level(logging.WARNING):
         Configuration(insights_config={"foo": "bar"})
+    assert any(
+        "Unknown InsightsConfig option" in msg for msg in caplog.text.splitlines()
+    )
 
 
 def test_configure_merges_insights_config():
