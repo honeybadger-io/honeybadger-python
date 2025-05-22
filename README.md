@@ -302,6 +302,8 @@ automatically instrument the following libraries:
 You can configure the instrumentation for specific libraries / components by
 passing a dictionary to a specialized `insights_config` parameter.
 
+By default, all keyword dict params are run through our `params_filters`.
+
 The following instrumentation configs are available:
 
 #### Django
@@ -310,7 +312,7 @@ The following instrumentation configs are available:
     honeybadger.configure(
         insights_config={
             "django": {
-                # Disable instrumentation for Flask, defaults to False
+                # Disable instrumentation for Django, defaults to False
                 "disabled": True,
                 # include GET/POST params in events, defaults to False
                 "include_params": True,

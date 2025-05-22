@@ -163,10 +163,22 @@ class Configuration(BaseConfig):
                 setattr(self, k, v)
 
     def is_dev(self):
+        """Returns wether you are in a dev environment or not
+
+        A dev environment is defined in the constant DEVELOPMENT_ENVIRONMENTS
+
+        :rtype: bool
+        """
         return self.environment in self.DEVELOPMENT_ENVIRONMENTS
 
     @property
     def is_aws_lambda_environment(self):
+        """
+        Checks if you are in an AWS Lambda environment by checking for the existence
+        of "AWS_LAMBDA_FUNCTION_NAME" in the environment variables.
+
+        :rtype: bool
+        """
         return os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not None
 
 
