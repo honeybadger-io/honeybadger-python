@@ -7,6 +7,7 @@ from mock import patch
 from honeybadger import honeybadger
 from honeybadger.config import Configuration
 from honeybadger.contrib.flask import FlaskPlugin, FlaskHoneybadger
+from honeybadger.tests.utils import with_config
 
 PYTHON_VERSION = sys.version_info[0:2]
 
@@ -406,3 +407,34 @@ class FlaskHoneybadgerInsightsTestCase(unittest.TestCase):
         self.assertEqual(payload["view"], "ping")
         # duration should be non‐negative
         self.assertGreaterEqual(payload["duration"], 0.0)
+
+    @patch("honeybadger.contrib.flask.honeybadger.event")
+    def test_insights_db_event(self, mock_event):
+        from sqlalchemy import create_engine, text
+
+        engine = create_engine("sqlite:///:memory:")
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+
+        assert mock_event.called
+        event_name, payload = mock_event.call_args[0]
+        assert event_name == "db.query"
+        assert "SELECT 1" in payload["query"]
+        assert "duration" in payload
+
+    @with_config({"insights_config": {"flask": {"disabled": True}}})
+    @patch("honeybadger.contrib.flask.honeybadger.event")
+    def test_insights_no_event_when_disabled(self, mock_event):
+        resp = self.client.get("/ping?foo=bar")
+        self.assertEqual(resp.status_code, 201)
+        mock_event.assert_not_called()
+
+    @with_config({"insights_config": {"flask": {"include_params": True}}})
+    @patch("honeybadger.contrib.flask.honeybadger.event")
+    def test_insights_event_includes_filtered_params(self, mock_event):
+        resp = self.client.post("/ping", data={"password": "ha!", "id": "abc123"})
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(mock_event.call_count, 1)
+
+        _, payload = mock_event.call_args[0]
+        self.assertEqual(payload["params"], {"id": "abc123"})

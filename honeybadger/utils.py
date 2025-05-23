@@ -45,7 +45,7 @@ def filter_env_vars(data):
     return filtered_data
 
 
-def filter_dict(data, filter_keys):
+def filter_dict(data, filter_keys, remove_keys=False):
     if type(data) != dict:
         return data
 
@@ -58,11 +58,14 @@ def filter_dict(data, filter_keys):
             data.pop(key)
             continue
 
-        if key in filter_keys:
-            data[key] = "[FILTERED]"
-
         if type(data[key]) == dict:
             data[key] = filter_dict(data[key], filter_keys)
+
+        if key in filter_keys:
+            if remove_keys:
+                data.pop(key)
+            else:
+                data[key] = "[FILTERED]"
 
     return data
 
