@@ -5,6 +5,7 @@ adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 - Fix: removes raising an exception in the `Notice` class.
+- Fix: `fake_connection` returns same type as `connection` (#212)
 
 ## [0.23.0] - 2025-05-12
 - Add `before_notify` hook to allow modification of notice before sending (#203)

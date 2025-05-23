@@ -1,4 +1,5 @@
 import logging
+from .types import EventsSendResult, EventsSendStatus
 
 logger = logging.getLogger(__name__)
 
@@ -12,11 +13,11 @@ def send_notice(config, notice):
     return notice_id
 
 
-def send_events(config, payload):
+def send_events(config, payload) -> EventsSendResult:
     logger.info(
         "Development mode is enabled; this event will be reported if it occurs after you deploy your app."
     )
     logger.debug(
         "[send_events] config used is {} with payload {}".format(config, payload)
     )
-    return True
+    return EventsSendResult(EventsSendStatus.OK)
