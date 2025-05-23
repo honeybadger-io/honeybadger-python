@@ -8,20 +8,78 @@ from honeybadger import Honeybadger
 from mock import MagicMock, patch
 
 
-def test_set_context():
-    honeybadger = Honeybadger()
-    honeybadger.set_context(foo="bar")
-    assert honeybadger.thread_local.context == dict(foo="bar")
-    honeybadger.set_context(bar="foo")
-    assert honeybadger.thread_local.context == dict(foo="bar", bar="foo")
+def test_set_and_get_context_merges_values():
+    hb = Honeybadger()
+    assert hb._get_context() == {}
+
+    hb.set_context(foo="bar")
+    hb.set_context(baz=123)
+    assert hb._get_context() == {"foo": "bar", "baz": 123}
+
+    hb.set_context({"a": 1})
+    assert hb._get_context() == {"foo": "bar", "baz": 123, "a": 1}
 
 
-def test_set_context_with_dict():
-    honeybadger = Honeybadger()
-    honeybadger.set_context(dict(foo="bar"))
-    assert honeybadger.thread_local.context == dict(foo="bar")
-    honeybadger.set_context(dict(foo="bar", bar="foo"))
-    assert honeybadger.thread_local.context == dict(foo="bar", bar="foo")
+def test_reset_context_clears_all():
+    hb = Honeybadger()
+    hb.set_context(temp="value")
+    assert hb._get_context()  # non-empty
+    hb.reset_context()
+    assert hb._get_context() == {}
+
+
+def test_context_manager_pushes_and_pops():
+    hb = Honeybadger()
+    hb.set_context(x=1)
+    original = hb._get_context()
+
+    with hb.context(y=2):
+        # inside block, we see both x and y
+        assert hb._get_context() == {"x": 1, "y": 2}
+
+    # after block, y is gone
+    assert hb._get_context() == original
+
+
+def test_thread_isolation():
+    hb = Honeybadger()
+    hb.set_context(main=True)
+
+    def worker():
+        # new thread should start with empty context
+        assert hb._get_context() == {}
+        hb.set_context(thread="worker")
+        assert hb._get_context() == {"thread": "worker"}
+
+    t = threading.Thread(target=worker)
+    t.start()
+    t.join()
+
+    # main thread context is untouched
+    assert hb._get_context() == {"main": True}
+
+
+def test_notify_merges_context_and_tags(monkeypatch):
+    hb = Honeybadger()
+    hb.set_context(user="alice", _tags=["from_ctx, another_tag"])
+    captured = {}
+
+    def fake_send(notice):
+        captured["context"] = notice.context
+        captured["tags"] = notice.tags
+
+    monkeypatch.setattr(hb, "_send_notice", fake_send)
+
+    hb.notify(
+        exception=RuntimeError("oops"),
+        context={"action": "save"},
+        tags=["explicit"],
+    )
+
+    # should merge store + explicit
+    assert captured["context"] == {"user": "alice", "action": "save"}
+    # tags deduped and merged
+    assert set(captured["tags"]) == {"from_ctx", "another_tag", "explicit"}
 
 
 def test_threading():

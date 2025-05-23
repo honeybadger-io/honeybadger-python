@@ -2,10 +2,9 @@ import threading
 from contextlib import contextmanager
 import sys
 import logging
-import copy
-import time
 import datetime
 import atexit
+from typing import Optional, Dict, Any, List
 
 from honeybadger.plugins import default_plugin_manager
 import honeybadger.connection as connection
@@ -13,18 +12,23 @@ import honeybadger.fake_connection as fake_connection
 from .events_worker import EventsWorker
 from .config import Configuration
 from .notice import Notice
+from .context_store import ContextStore
 
 logger = logging.getLogger("honeybadger")
 logger.addHandler(logging.NullHandler())
+
+error_context = ContextStore("honeybadger_error_context")
+event_context = ContextStore("honeybadger_event_context")
 
 
 class Honeybadger(object):
     TS_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
 
     def __init__(self):
+        error_context.clear()
+        event_context.clear()
+
         self.config = Configuration()
-        self.thread_local = threading.local()
-        self.thread_local.context = {}
         self.events_worker = EventsWorker(
             self._connection(), self.config, logger=logging.getLogger("honeybadger")
         )
@@ -47,11 +51,9 @@ class Honeybadger(object):
 
         self._connection().send_notice(self.config, notice)
 
-    def _get_context(self):
-        return getattr(self.thread_local, "context", {})
-
-    def begin_request(self, request):
-        self.thread_local.context = self._get_context()
+    def begin_request(self, _):
+        error_context.clear()
+        event_context.clear()
 
     def wrap_excepthook(self, func):
         self.existing_except_hook = func
@@ -72,18 +74,22 @@ class Honeybadger(object):
         exception=None,
         error_class=None,
         error_message=None,
-        context={},
+        context: Optional[Dict[str, Any]] = None,
         fingerprint=None,
-        tags=[],
+        tags: Optional[List[str]] = None,
     ):
+        base = error_context.get()
+        tag_ctx = base.pop("_tags", [])
+        merged_ctx = {**base, **(context or {})}
+        merged_tags = list({*tag_ctx, *(tags or [])})
+
         notice = Notice(
             exception=exception,
             error_class=error_class,
             error_message=error_message,
-            context=context,
+            context=merged_ctx,
             fingerprint=fingerprint,
-            tags=tags,
-            thread_local=self.thread_local,
+            tags=merged_tags,
             config=self.config,
         )
         return self._send_notice(notice)
@@ -130,28 +136,29 @@ class Honeybadger(object):
         if self.config.is_aws_lambda_environment:
             default_plugin_manager.register(contrib.AWSLambdaPlugin())
 
-    def set_context(self, ctx=None, **kwargs):
-        # This operation is an update, not a set!
-        if not ctx:
-            ctx = kwargs
-        else:
-            ctx.update(kwargs)
-        self.thread_local.context = self._get_context()
-        self.thread_local.context.update(ctx)
+    # Error context
+    #
+    def _get_context(self):
+        return error_context.get()
+
+    def set_context(self, ctx: Optional[Dict[str, Any]] = None, **kwargs):
+        error_context.update(ctx, **kwargs)
 
     def reset_context(self):
-        self.thread_local.context = {}
+        error_context.clear()
 
     @contextmanager
-    def context(self, **kwargs):
-        original_context = copy.copy(self._get_context())
-        self.set_context(**kwargs)
-        try:
+    def context(self, ctx: Optional[Dict[str, Any]] = None, **kwargs):
+        with error_context.override(ctx, **kwargs):
             yield
-        except:
-            raise
-        else:
-            self.thread_local.context = original_context
+
+    # Event context
+    #
+    def _get_event_context(self):
+        return event_context.get()
+
+    def set_event_context(self, **kwargs):
+        event_context.update(**kwargs)
 
     def _connection(self):
         if self.config.is_dev() and not self.config.force_report_data:

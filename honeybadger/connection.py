@@ -3,7 +3,6 @@ import json
 import threading
 
 from urllib.error import HTTPError, URLError
-from typing import Protocol
 from six.moves.urllib import request
 from six import b
 
