@@ -107,6 +107,17 @@ class Honeybadger(object):
                 "The first argument must be either a string or a dictionary"
             )
 
+        if callable(self.config.before_event):
+            try:
+                next_payload = self.config.before_event(payload)
+                if next_payload is False:
+                    return  # Skip sending the event
+                elif next_payload is not payload and next_payload is not None:
+                    payload = next_payload  # Overwrite payload
+                # else: assume in-place mutation; keep payload as-is
+            except Exception as e:
+                logger.error("Error in before_event callback: %s", e)
+
         # Add a timestamp to the payload if not provided
         if "ts" not in payload:
             payload["ts"] = datetime.datetime.now(datetime.timezone.utc)
