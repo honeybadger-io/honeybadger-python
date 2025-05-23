@@ -318,6 +318,37 @@ def test_event_without_event_type():
     assert payload["email"] == "user@example.com"
 
 
+def test_event_with_event_context():
+    mock_events_worker = MagicMock()
+
+    hb = Honeybadger()
+    hb.events_worker = mock_events_worker
+    hb.configure(api_key="aaa", force_report_data=True)
+    hb.set_event_context(service="web")
+    hb.event(event_type="order.completed", data=dict(email="user@example.com"))
+
+    mock_events_worker.push.assert_called_once()
+    payload = mock_events_worker.push.call_args[0][0]
+
+    assert payload["service"] == "web"
+    assert payload["email"] == "user@example.com"
+
+
+def test_event_with_event_context_does_not_override():
+    mock_events_worker = MagicMock()
+
+    hb = Honeybadger()
+    hb.events_worker = mock_events_worker
+    hb.configure(api_key="aaa", force_report_data=True)
+    hb.set_event_context(service="web")
+    hb.event(event_type="order.completed", data=dict(service="my-service!"))
+
+    mock_events_worker.push.assert_called_once()
+    payload = mock_events_worker.push.call_args[0][0]
+
+    assert payload["service"] == "my-service!"
+
+
 def test_notify_with_before_notify_changes():
     def before_notify(notice):
         notice.payload["error"]["tags"] = ["tag1-updated"]

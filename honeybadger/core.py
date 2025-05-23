@@ -119,7 +119,9 @@ class Honeybadger(object):
         if isinstance(payload["ts"], datetime.datetime):
             payload["ts"] = payload["ts"].strftime(self.TS_FORMAT)
 
-        return self.events_worker.push(payload)
+        final_payload = {**self._get_event_context(), **payload}
+
+        return self.events_worker.push(final_payload)
 
     def configure(self, **kwargs):
         self.config.set_config_from_dict(kwargs)
@@ -159,6 +161,14 @@ class Honeybadger(object):
 
     def set_event_context(self, **kwargs):
         event_context.update(**kwargs)
+
+    def reset_event_context(self):
+        event_context.clear()
+
+    @contextmanager
+    def event_context(self, ctx: Optional[Dict[str, Any]] = None, **kwargs):
+        with event_context.override(ctx, **kwargs):
+            yield
 
     def _connection(self):
         if self.config.is_dev() and not self.config.force_report_data:
