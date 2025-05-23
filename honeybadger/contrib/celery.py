@@ -1,5 +1,11 @@
+import threading
+import time
+
 from honeybadger import honeybadger
 from honeybadger.plugins import Plugin, default_plugin_manager
+from honeybadger.utils import extract_honeybadger_config, get_duration
+
+_listener_started = False
 
 
 class CeleryPlugin(Plugin):
@@ -61,17 +67,80 @@ class CeleryHoneybadger(object):
         """
         Initialize honeybadger and listen for errors.
         """
-        from celery.signals import task_failure, task_postrun
+        from celery.signals import task_failure, task_postrun, task_prerun, worker_ready
 
+        self._task_starts = {}
         self._initialize_honeybadger(self.app.conf)
+
         if self.report_exceptions:
             task_failure.connect(self._on_task_failure, weak=False)
         task_postrun.connect(self._on_task_postrun, weak=False)
 
-    def _on_task_postrun(self, *args, **kwargs):
+        if honeybadger.config.insights_enabled:
+            # Enable task events, as we need to listen to
+            # task-finished events
+            self.app.conf.worker_send_task_events = True
+            task_prerun.connect(self._on_task_prerun, weak=False)
+            worker_ready.connect(self._start_task_event_listener, weak=False)
+
+    def _initialize_honeybadger(self, config):
+        """
+        Initializes honeybadger using the given config object.
+        :param dict config: a dict or dict-like object that contains honeybadger configuration properties.
+        """
+        config_kwargs = extract_honeybadger_config(config)
+
+        if not config_kwargs.get("api_key"):
+            return
+
+        honeybadger.configure(**config_kwargs)
+        honeybadger.config.set_12factor_config()  # environment should override celery settings
+
+    def _start_task_event_listener(self, *args, **kwargs):
+        # only start the listener once
+        global _listener_started
+        if _listener_started:
+            return
+        _listener_started = True
+
+        from celery.events import EventReceiver  # type: ignore[import]
+
+        def run():
+            with self.app.connection() as conn:
+                recv = EventReceiver(
+                    conn, handlers={"task-finished": self._on_task_finished}
+                )
+                recv.capture(limit=None, timeout=None, wakeup=False)
+
+        self._listen_thread = threading.Thread(target=run, daemon=True)
+        self._listen_thread.start()
+
+    def _on_task_finished(self, payload, **kwargs):
+        honeybadger.event("celery.task_finished", payload["payload"])
+
+    def _on_task_prerun(self, task_id=None, task=None, *args, **kwargs):
+        self._task_starts[task_id] = time.time()
+
+    def _on_task_postrun(self, task_id=None, task=None, *args, **kwargs):
         """
         Callback executed after a task is finished.
         """
+
+        if honeybadger.config.insights_enabled:
+            payload = {
+                "task_id": task_id,
+                "task_name": task.name,
+                "retries": task.request.retries,
+                "group": task.request.group,
+                "state": kwargs["state"],
+                "duration": get_duration(self._task_starts.pop(task_id, None)),
+                # TODO: allow filtering before sending args
+                # "args": kwargs["args"],
+                # "kwargs": kwargs["kwargs"],
+            }
+
+            task.send_event("task-finished", payload=payload)
+
         honeybadger.reset_context()
 
     def _on_task_failure(self, *args, **kwargs):
@@ -79,22 +148,6 @@ class CeleryHoneybadger(object):
         Report exception to honeybadger when a task fails.
         """
         honeybadger.notify(exception=kwargs["exception"])
-
-    def _initialize_honeybadger(self, config):
-        """
-        Initializes honeybadger using the given config object.
-        :param dict config: a dict or dict-like object that contains honeybadger configuration properties.
-        """
-        api_key = config.get("HONEYBADGER_API_KEY")
-        if not api_key:
-            return
-        honeybadger_config = {
-            "api_key": api_key,
-            "environment": config.get("HONEYBADGER_ENVIRONMENT", "development"),
-            "force_report_data": config.get("HONEYBADGER_FORCE_REPORT_DATA", False),
-        }
-        honeybadger.configure(**honeybadger_config)
-        honeybadger.config.set_12factor_config()  # environment should override celery settings
 
     def tearDown(self):
         """
@@ -105,6 +158,15 @@ class CeleryHoneybadger(object):
         task_postrun.disconnect(self._on_task_postrun)
         if self.report_exceptions:
             task_failure.disconnect(self._on_task_failure)
+
+        if honeybadger.config.insights_enabled:
+            from celery.signals import worker_ready, task_prerun
+
+            task_prerun.disconnect(self._on_task_prerun)
+            worker_ready.disconnect(self._start_task_event_listener)
+
+        if hasattr(self, "_listen_thread"):
+            self._listen_thread.join(timeout=1)
 
     # Keep the misspelled method for backward compatibility
     def tearDowm(self):

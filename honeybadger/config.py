@@ -20,6 +20,8 @@ class Configuration(object):
         ("report_local_variables", bool),
         ("before_notify", callable),
         # Insights options
+        ("insights_enabled", bool),
+        # Events options
         ("events_batch_size", int),
         ("events_max_queue_size", int),
         ("events_timeout", float),
@@ -44,6 +46,8 @@ class Configuration(object):
         self.excluded_exceptions = []
         self.report_local_variables = False
         self.before_notify = lambda notice: notice
+
+        self.insights_enabled = False
 
         self.events_max_batch_retries = 3
         self.events_max_queue_size = 10_000
