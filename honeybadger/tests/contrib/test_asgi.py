@@ -3,7 +3,9 @@ import unittest
 from async_asgi_testclient import TestClient  # type: ignore
 import aiounittest
 import mock
+from honeybadger import honeybadger
 from honeybadger import contrib
+from honeybadger.config import Configuration
 
 
 class SomeError(Exception):
@@ -79,14 +81,11 @@ class ASGIPluginTestCase(unittest.TestCase):
 
 
 class ASGIEventPayloadTestCase(unittest.TestCase):
-    def setUp(self):
-        # wrap your ASGI app in the plugin
-        app = contrib.ASGIHoneybadger(asgi_app(), api_key="abcd", insights_enabled=True)
-        self.client = TestClient(app)
-
     @aiounittest.async_test
     @mock.patch("honeybadger.contrib.asgi.honeybadger.event")
     async def test_success_event_payload(self, event):
+        app = contrib.ASGIHoneybadger(asgi_app(), api_key="abcd", insights_enabled=True)
+        self.client = TestClient(app)
         # even if there’s a query, url stays just the path
         await self.client.get("/hello?x=1")
         event.assert_called_once()
@@ -97,3 +96,4 @@ class ASGIEventPayloadTestCase(unittest.TestCase):
         self.assertEqual(payload["path"], "/hello")
         self.assertEqual(payload["status"], 200)
         self.assertIsInstance(payload["duration"], float)
+        honeybadger.config = Configuration()
