@@ -4,7 +4,10 @@ CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+
+## [0.23.1] - 2025-05-23
 - Fix: removes raising an exception in the `Notice` class.
+- Fix: `fake_connection` returns same type as `connection` (#212)
 
 ## [0.23.0] - 2025-05-12
 - Add `before_notify` hook to allow modification of notice before sending (#203)
