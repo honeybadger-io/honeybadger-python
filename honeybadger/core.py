@@ -159,8 +159,8 @@ class Honeybadger(object):
     def _get_event_context(self):
         return event_context.get()
 
-    def set_event_context(self, **kwargs):
-        event_context.update(**kwargs)
+    def set_event_context(self, ctx: Optional[Dict[str, Any]] = None, **kwargs):
+        event_context.update(ctx, **kwargs)
 
     def reset_event_context(self):
         event_context.clear()

@@ -2,6 +2,7 @@ import json
 import threading
 
 import pytest
+import asyncio
 
 from .utils import mock_urlopen
 from honeybadger import Honeybadger
@@ -56,6 +57,22 @@ def test_thread_isolation():
     t.join()
 
     # main thread context is untouched
+    assert hb._get_context() == {"main": True}
+
+
+@pytest.mark.asyncio
+async def test_context_async_isolation():
+    hb = Honeybadger()
+    hb.set_context(main=True)
+    assert hb._get_context() == {"main": True}
+
+    async def worker():
+        assert hb._get_context() == {"main": True}
+        hb.set_context(thread="worker")
+        assert hb._get_context() == {"main": True, "thread": "worker"}
+
+    tasks = [asyncio.create_task(worker()) for _ in range(2)]
+    await asyncio.gather(*tasks)
     assert hb._get_context() == {"main": True}
 
 
@@ -347,6 +364,73 @@ def test_event_with_event_context_does_not_override():
     payload = mock_events_worker.push.call_args[0][0]
 
     assert payload["service"] == "my-service!"
+
+
+def test_set_and_get_event_context_merges_values():
+    hb = Honeybadger()
+    assert hb._get_event_context() == {}
+
+    hb.set_event_context(foo="bar")
+    hb.set_event_context(baz=123)
+    assert hb._get_event_context() == {"foo": "bar", "baz": 123}
+
+    hb.set_event_context({"a": 1})
+    assert hb._get_event_context() == {"foo": "bar", "baz": 123, "a": 1}
+
+
+def test_reset_event_context_clears_all():
+    hb = Honeybadger()
+    hb.set_event_context(temp="value")
+    assert hb._get_event_context()  # non-empty
+    hb.reset_event_context()
+    assert hb._get_event_context() == {}
+
+
+def test_event_context_manager_pushes_and_pops():
+    hb = Honeybadger()
+    hb.set_event_context(x=1)
+    original = hb._get_event_context()
+
+    with hb.event_context(y=2):
+        # inside block, we see both x and y
+        assert hb._get_event_context() == {"x": 1, "y": 2}
+
+    # after block, y is gone
+    assert hb._get_event_context() == original
+
+
+def test_event_context_thread_isolation():
+    hb = Honeybadger()
+    hb.set_event_context(main=True)
+
+    def worker():
+        # new thread should start with empty event_context
+        assert hb._get_event_context() == {}
+        hb.set_event_context(thread="worker")
+        assert hb._get_event_context() == {"thread": "worker"}
+
+    t = threading.Thread(target=worker)
+    t.start()
+    t.join()
+
+    # main thread event_context is untouched
+    assert hb._get_event_context() == {"main": True}
+
+
+@pytest.mark.asyncio
+async def test_event_context_async_isolation():
+    hb = Honeybadger()
+    hb.set_event_context(main=True)
+    assert hb._get_event_context() == {"main": True}
+
+    async def worker():
+        assert hb._get_event_context() == {"main": True}
+        hb.set_event_context(thread="worker")
+        assert hb._get_event_context() == {"main": True, "thread": "worker"}
+
+    tasks = [asyncio.create_task(worker()) for _ in range(2)]
+    await asyncio.gather(*tasks)
+    assert hb._get_event_context() == {"main": True}
 
 
 def test_notify_with_before_notify_changes():
