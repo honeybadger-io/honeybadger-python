@@ -22,6 +22,7 @@ class Configuration(object):
         # Insights options
         ("insights_enabled", bool),
         # Events options
+        ("before_event", callable),
         ("events_batch_size", int),
         ("events_max_queue_size", int),
         ("events_timeout", float),
@@ -48,6 +49,7 @@ class Configuration(object):
         self.before_notify = lambda notice: notice
 
         self.insights_enabled = False
+        self.before_event = lambda event: event
 
         self.events_max_batch_retries = 3
         self.events_max_queue_size = 10_000
