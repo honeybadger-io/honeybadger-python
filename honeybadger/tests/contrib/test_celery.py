@@ -1,15 +1,10 @@
-import pytest
 import time
 import re
 from unittest.mock import patch, MagicMock
 
 from celery import Celery
-from celery.app.task import Context
-from honeybadger import honeybadger
 from honeybadger.contrib.celery import CeleryHoneybadger, CeleryPlugin
 from honeybadger.tests.utils import with_config
-
-import honeybadger.connection as connection
 
 
 @patch("honeybadger.honeybadger.reset_context")
@@ -58,10 +53,12 @@ def test_plugin_payload():
     test_task = MagicMock()
     test_task.name = "test_task"
     test_task.max_retries = 10
-    test_task.request = Context(
+    test_task.request = MagicMock(
         id="test_id",
         name="test_task",
         args=(1, 2),
+        retries=0,
+        max_retries=10,
         kwargs={"foo": "bar"},
     )
 
