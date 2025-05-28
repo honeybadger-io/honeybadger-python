@@ -6,6 +6,7 @@ import pytest
 from .utils import mock_urlopen
 from honeybadger import Honeybadger
 from mock import MagicMock, patch
+from honeybadger.config import Configuration
 
 
 def test_set_context():
@@ -258,6 +259,49 @@ def test_event_without_event_type():
 
     assert "ts" in payload
     assert payload["email"] == "user@example.com"
+
+
+def test_event_with_before_event_mutated_changes():
+    def before_event(event):
+        if "ignore" in event:
+            return False
+        event["new_key"] = "new_value"
+
+    mock_events_worker = MagicMock()
+    hb = Honeybadger()
+    hb.events_worker = mock_events_worker
+    hb.configure(api_key="aaa", force_report_data=True, before_event=before_event)
+    hb.event(dict(email="user@example.com"))
+    hb.event(dict(ignore="yeah"))
+
+    mock_events_worker.push.assert_called_once()
+    payload = mock_events_worker.push.call_args[0][0]
+    assert len(mock_events_worker.push.call_args[0]) == 1
+
+    assert "ts" in payload
+    assert payload["new_key"] == "new_value"
+    hb.config = Configuration()
+
+
+def test_event_with_before_event_returned_changes():
+    def before_event(event):
+        return {
+            "new_key": "new_value",
+        }
+
+    mock_events_worker = MagicMock()
+    hb = Honeybadger()
+    hb.events_worker = mock_events_worker
+    hb.configure(api_key="aaa", force_report_data=True, before_event=before_event)
+    hb.event(dict(a="b"))
+
+    mock_events_worker.push.assert_called_once()
+    payload = mock_events_worker.push.call_args[0][0]
+    assert "ts" in payload
+    assert payload["new_key"] == "new_value"
+    assert "a" not in payload
+
+    hb.config = Configuration()
 
 
 def test_notify_with_before_notify_changes():
