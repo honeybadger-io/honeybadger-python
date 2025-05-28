@@ -9,14 +9,11 @@ class Notice(object):
         self.error_message = kwargs.get("error_message", None)
         self.exc_traceback = kwargs.get("exc_traceback", None)
         self.fingerprint = kwargs.get("fingerprint", None)
-        self.thread_local = kwargs.get("thread_local", None)
         self.config = kwargs.get("config", None)
         self.context = kwargs.get("context", {})
         self.tags = self._construct_tags(kwargs.get("tags", []))
 
         self._process_exception()
-        self._process_context()
-        self._process_tags()
 
     def _process_exception(self):
         if self.exception is None and self.error_class:
@@ -27,15 +24,6 @@ class Notice(object):
                 self.exception.update({"error_message": self.error_message})
         elif self.exception and self.error_message:
             self.context["error_message"] = self.error_message
-
-    def _process_context(self):
-        self.context = dict(**self._get_thread_context(), **self.context)
-
-    def _process_tags(self):
-        tags_from_context = self._construct_tags(
-            self._get_thread_context().get("_tags", [])
-        )
-        self.tags = list(set(tags_from_context + self.tags))
 
     @cached_property
     def payload(self):
@@ -61,15 +49,24 @@ class Notice(object):
                 return True
         return False
 
-    def _get_thread_context(self):
-        if self.thread_local is None:
-            return {}
-        return getattr(self.thread_local, "context", {})
-
     def _construct_tags(self, tags):
-        constructed_tags = []
+        """
+        Accepts either:
+          - a single string (possibly comma-separated)
+          - a list of strings (each possibly comma-separated)
+        and returns a flat list of stripped tags.
+        """
+        raw = []
         if isinstance(tags, str):
-            constructed_tags = [tag.strip() for tag in tags.split(",")]
-        elif isinstance(tags, list):
-            constructed_tags = tags
-        return constructed_tags
+            raw = [tags]
+        elif isinstance(tags, (list, tuple)):
+            raw = tags
+        out = []
+        for item in raw:
+            if not isinstance(item, str):
+                continue
+            for part in item.split(","):
+                t = part.strip()
+                if t:
+                    out.append(t)
+        return out
