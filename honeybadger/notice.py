@@ -49,11 +49,6 @@ class Notice(object):
                 return True
         return False
 
-    def _get_thread_context(self):
-        if self.thread_local is None:
-            return {}
-        return getattr(self.thread_local, "context", {})
-
     def _construct_tags(self, tags):
         """
         Accepts either:

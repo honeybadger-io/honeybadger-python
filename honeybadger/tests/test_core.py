@@ -100,6 +100,27 @@ def test_notify_merges_context_and_tags(monkeypatch):
     assert set(captured["tags"]) == {"from_ctx", "another_tag", "explicit"}
 
 
+def test_exception_hook_calls_notify(monkeypatch):
+    hb = Honeybadger()
+    captured = {}
+
+    def fake_send(notice=None, **kwargs):
+        captured["notified"] = notice
+        return "sent"
+
+    def fake_existing_except_hook(*args, **kwargs):
+        captured["hook"] = True
+
+    monkeypatch.setattr(hb, "_send_notice", fake_send)
+
+    exc = ValueError("fail!")
+    hb.wrap_excepthook(fake_existing_except_hook)
+    hb.exception_hook(ValueError, exc, None)
+
+    assert captured["notified"].exception == exc
+    assert captured["hook"] is True
+
+
 def test_threading():
     hb = Honeybadger()
     hb.configure(api_key="aaa", environment="development")  # Explicitly use development

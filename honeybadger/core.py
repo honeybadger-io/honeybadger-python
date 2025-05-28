@@ -60,10 +60,7 @@ class Honeybadger(object):
         sys.excepthook = self.exception_hook
 
     def exception_hook(self, type, exception, exc_traceback):
-        notice = Notice(
-            exception=exception, thread_local=self.thread_local, config=self.config
-        )
-        self._send_notice(notice)
+        self.notify(exception=exception)
         self.existing_except_hook(type, exception, exc_traceback)
 
     def shutdown(self):
