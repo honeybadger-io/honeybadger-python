@@ -3,7 +3,7 @@ import time
 
 from honeybadger import honeybadger
 from honeybadger.plugins import Plugin, default_plugin_manager
-from honeybadger.utils import extract_honeybadger_config, get_duration
+from honeybadger.utils import filter_dict, extract_honeybadger_config, get_duration
 
 _listener_started = False
 
@@ -125,8 +125,23 @@ class CeleryHoneybadger(object):
         """
         Callback executed after a task is finished.
         """
+        insights_config = honeybadger.config.insights_config
 
-        if honeybadger.config.insights_enabled:
+        exclude = insights_config.celery.exclude_tasks
+        should_exclude = exclude and any(
+            (
+                pattern.search(task.name)
+                if hasattr(pattern, "search")
+                else pattern == task.name
+            )
+            for pattern in exclude
+        )
+
+        if (
+            honeybadger.config.insights_enabled
+            and not insights_config.celery.disabled
+            and not should_exclude
+        ):
             payload = {
                 "task_id": task_id,
                 "task_name": task.name,
@@ -134,10 +149,15 @@ class CeleryHoneybadger(object):
                 "group": task.request.group,
                 "state": kwargs["state"],
                 "duration": get_duration(self._task_starts.pop(task_id, None)),
-                # TODO: allow filtering before sending args
-                # "args": kwargs["args"],
-                # "kwargs": kwargs["kwargs"],
             }
+
+            if insights_config.celery.include_args:
+                payload["args"] = task.request.args
+                payload["kwargs"] = filter_dict(
+                    task.request.kwargs,
+                    honeybadger.config.params_filters,
+                    remove_keys=True,
+                )
 
             task.send_event("task-finished", payload=payload)
 

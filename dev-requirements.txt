@@ -17,6 +17,7 @@ pytest
 pytest-cov
 pytest-asyncio
 six
+sqlalchemy
 testfixtures
 typing-extensions
 

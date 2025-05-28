@@ -297,6 +297,112 @@ automatically instrument the following libraries:
 - ASGI requests
 - Celery tasks
 
+### Configuration
+
+You can configure the instrumentation for specific libraries / components by
+passing a dictionary to a specialized `insights_config` parameter.
+
+By default, all keyword dict params are run through our `params_filters`.
+
+The following instrumentation configs are available:
+
+#### Django
+
+```python
+    honeybadger.configure(
+        insights_config={
+            "django": {
+                # Disable instrumentation for Django, defaults to False
+                "disabled": True,
+                # include GET/POST params in events, defaults to False
+                "include_params": True,
+            }
+        }
+    )
+```
+
+#### Flask
+
+```python
+    honeybadger.configure(
+        insights_config={
+            "flask": {
+                # Disable instrumentation for Flask, defaults to False
+                "disabled": True,
+                # Include GET/POST params in events, defaults to False
+                "include_params": True,
+            }
+        }
+    )
+```
+
+#### ASGI
+
+```python
+    honeybadger.configure(
+        insights_config={
+            "asgi": {
+                # Disable instrumentation for ASGI, defaults to False
+                "disabled": True,
+                # Include query params in events, defaults to False
+                "include_params": True,
+            }
+        }
+    )
+```
+
+#### Celery
+
+```python
+    honeybadger.configure(
+        insights_config={
+            "celery": {
+                # Disable instrumentation for Celery, defaults to False
+                "disabled": True,
+                # Include task args/kwargs, defaults to False
+                "include_args": True,
+                # List of task names or regexes to exclude, defaults to []
+                "exclude_tasks": [
+                    "tasks.cleanup",
+                    re.compile("^internal_"),
+                ],
+            }
+        }
+    )
+```
+
+#### DB
+
+To configure database instrumentation, you can pass a dictionary to the
+"db" insights config. This will affect all supported libraries that use capture
+database events.
+
+```python
+    honeybadger.configure(
+        insights_config={
+            "db": {
+                # Disable instrumentation for DB, defaults to False
+                "disabled": True,
+                # Include SQL params in events, defaults to False
+                "include_params": True,
+
+                # List of task names or regexes to exclude, defaults to
+                # `honeybadger.config.default_excluded_queries()`
+                "exclude_queries": [
+                    "django_admin_log",                 # Matches any query containing this string
+                    re.compile(r".*auth_permission.*"), # Regex pattern
+                ],
+
+                # To add to the default excluded queries, use the `honeybadger.config.default_excluded_queries()` method
+                "exclude_queries": honeybadger.config.default_excluded_queries() + [
+                    re.compile(r".*django_admin_log.*"),
+                    re.compile(r".*auth_permission.*"),
+                ],
+            }
+        }
+    )
+```
+
 ## Logging
 
 By default, Honeybadger uses the `logging.NullHandler` for logging so it doesn't make any assumptions about your logging setup. In Django, add a `honeybadger` section to your `LOGGING` config to enable Honeybadger logging. For example:
