@@ -171,7 +171,7 @@ class Configuration(BaseConfig):
         return os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not None
 
 
-def filter_and_warn_unknown(opts: dict[str, Any], schema: Any) -> dict[str, Any]:
+def filter_and_warn_unknown(opts: Dict[str, Any], schema: Any) -> Dict[str, Any]:
     if is_dataclass(schema):
         if isinstance(schema, type):  # It's a class
             schema_name = schema.__name__
