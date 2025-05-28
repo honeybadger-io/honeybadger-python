@@ -1,11 +1,14 @@
 from honeybadger import honeybadger, plugins, utils
 from honeybadger.utils import get_duration
+import logging
 import time
 import urllib
 import inspect
 import asyncio
 import json
 from typing import Dict, Any, Optional, Callable, Awaitable, Union, Tuple, List, cast
+
+logger = logging.getLogger(__name__)
 
 
 def _looks_like_asgi3(app) -> bool:
@@ -133,31 +136,36 @@ class ASGIHoneybadger(plugins.Plugin):
             honeybadger.notify(exception=exc, context=_as_context(scope))
             raise
         finally:
-            asgi_config = honeybadger.config.insights_config.asgi
-            if honeybadger.config.insights_enabled and not asgi_config.disabled:
-                payload = {
-                    "method": scope.get("method"),
-                    "path": scope.get("path"),
-                    "status": status,
-                    "duration": get_duration(start),
-                }
+            try:
+                asgi_config = honeybadger.config.insights_config.asgi
+                if honeybadger.config.insights_enabled and not asgi_config.disabled:
+                    payload = {
+                        "method": scope.get("method"),
+                        "path": scope.get("path"),
+                        "status": status,
+                        "duration": get_duration(start),
+                    }
 
-                if asgi_config.include_params:
-                    raw_qs = scope.get("query_string", b"")
-                    params = {}
-                    if raw_qs:
-                        parsed = urllib.parse.parse_qs(raw_qs.decode())
-                        for key, values in parsed.items():
-                            params[key] = values[0] if len(values) == 1 else values
+                    if asgi_config.include_params:
+                        raw_qs = scope.get("query_string", b"")
+                        params = {}
+                        if raw_qs:
+                            parsed = urllib.parse.parse_qs(raw_qs.decode())
+                            for key, values in parsed.items():
+                                params[key] = values[0] if len(values) == 1 else values
 
-                    payload["params"] = utils.filter_dict(
-                        params,
-                        honeybadger.config.params_filters,
-                        remove_keys=True,
-                    )
+                        payload["params"] = utils.filter_dict(
+                            params,
+                            honeybadger.config.params_filters,
+                            remove_keys=True,
+                        )
 
-                honeybadger.event("asgi.request", payload)
-            honeybadger.reset_context()
+                    honeybadger.event("asgi.request", payload)
+                honeybadger.reset_context()
+            except Exception as e:
+                logger.warning(
+                    f"Exception while sending Honeybadger event: {e}", exc_info=True
+                )
 
     def supports(self, config, context):
         return context.get("asgi") is not None
