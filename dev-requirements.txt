@@ -16,6 +16,7 @@ pylint
 pytest
 pytest-cov
 six
+sqlalchemy
 testfixtures
 typing-extensions
 

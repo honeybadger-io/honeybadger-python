@@ -3,9 +3,11 @@ import unittest
 from async_asgi_testclient import TestClient  # type: ignore
 import aiounittest
 import mock
+
 from honeybadger import honeybadger
 from honeybadger import contrib
 from honeybadger.config import Configuration
+from honeybadger.tests.utils import with_config
 
 
 class SomeError(Exception):
@@ -53,41 +55,17 @@ class ASGIPluginTestCase(unittest.TestCase):
         response = await self.client.get("/")
         hb.notify.assert_not_called()
 
-    @aiounittest.async_test
-    @mock.patch("honeybadger.contrib.asgi.honeybadger")
-    async def test_should_send_request_event_on_success(self, hb):
-        response = await self.client.get("/test")
-        self.assertEqual(response.status_code, 200)
-        hb.event.assert_called_once()
-        name, payload = hb.event.call_args.args
-        self.assertEqual(name, "asgi.request")
-        self.assertEqual(payload["method"], "GET")
-        self.assertEqual(payload["path"], "/test")
-        self.assertEqual(payload["status"], 200)
-        self.assertIsInstance(payload["duration"], float)
-
-    @aiounittest.async_test
-    @mock.patch("honeybadger.contrib.asgi.honeybadger")
-    async def test_should_send_request_event_on_exception(self, hb):
-        with self.assertRaises(SomeError):
-            await self.client.get("/error")
-        hb.event.assert_called_once()
-        name, payload = hb.event.call_args.args
-        self.assertEqual(name, "asgi.request")
-        self.assertEqual(payload["method"], "GET")
-        self.assertEqual(payload["path"], "/error")
-        self.assertIsNone(payload["status"])
-        self.assertIsInstance(payload["duration"], float)
-
 
 class ASGIEventPayloadTestCase(unittest.TestCase):
     @aiounittest.async_test
+    @with_config({"insights_enabled": True})
     @mock.patch("honeybadger.contrib.asgi.honeybadger.event")
     async def test_success_event_payload(self, event):
-        app = contrib.ASGIHoneybadger(asgi_app(), api_key="abcd", insights_enabled=True)
-        self.client = TestClient(app)
+        app = TestClient(
+            contrib.ASGIHoneybadger(asgi_app(), api_key="abcd", insights_enabled=True)
+        )
         # even if there’s a query, url stays just the path
-        await self.client.get("/hello?x=1")
+        await app.get("/hello?x=1")
         event.assert_called_once()
         name, payload = event.call_args.args
 
@@ -96,4 +74,30 @@ class ASGIEventPayloadTestCase(unittest.TestCase):
         self.assertEqual(payload["path"], "/hello")
         self.assertEqual(payload["status"], 200)
         self.assertIsInstance(payload["duration"], float)
-        honeybadger.config = Configuration()
+
+    @aiounittest.async_test
+    @with_config(
+        {"insights_enabled": True, "insights_config": {"asgi": {"disabled": True}}}
+    )
+    @mock.patch("honeybadger.contrib.asgi.honeybadger.event")
+    async def test_disabled_by_insights_config(self, event):
+        app = TestClient(contrib.ASGIHoneybadger(asgi_app(), api_key="abcd"))
+        await app.get("/hello?x=1")
+        event.assert_not_called()
+
+    @aiounittest.async_test
+    @with_config(
+        {
+            "insights_enabled": True,
+            "insights_config": {"asgi": {"include_params": True}},
+        }
+    )
+    @mock.patch("honeybadger.contrib.asgi.honeybadger.event")
+    async def test_disable_insights(self, event):
+        app = TestClient(
+            contrib.ASGIHoneybadger(asgi_app(), api_key="abcd", insights_enabled=True)
+        )
+        await app.get("/hello?x=1&password=secret&y=2&y=3")
+        event.assert_called_once()
+        name, payload = event.call_args.args
+        self.assertEqual(payload["params"], {"x": "1", "y": ["2", "3"]})

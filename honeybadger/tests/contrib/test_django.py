@@ -246,7 +246,15 @@ class DjangoMiddlewareIntegrationTestCase(SimpleTestCase):
             self.assertTrue(request_mock.called)
 
 
-@override_settings(HONEYBADGER={"INSIGHTS_ENABLED": True})
+class FakeCursorWrapper:
+    def __init__(self, *a, **kw):
+        pass
+
+    def execute(self, sql, params=None):
+        return f"original execute: {sql}"
+
+
+@override_settings(HONEYBADGER={"INSIGHTS_ENABLED": True, "INSIGHTS_CONFIG": {}})
 class DjangoMiddlewareEventTestCase(SimpleTestCase):
     def setUp(self):
         self.rf = RequestFactory()
@@ -288,3 +296,42 @@ class DjangoMiddlewareEventTestCase(SimpleTestCase):
         mw = DjangoHoneybadgerMiddleware(lambda req: Mock())
         mw(request)
         self.assertIsNone(current_request())
+
+    @patch("django.db.backends.utils.CursorWrapper", new=FakeCursorWrapper)
+    @patch("honeybadger.contrib.django.honeybadger.event")
+    def test_patch_cursor_and_execute_sends_event(self, mock_event):
+        mw = DjangoHoneybadgerMiddleware(lambda req: None)
+        cur = FakeCursorWrapper()
+        res = cur.execute("SELECT something")
+        assert res == "original execute: SELECT something"
+        mock_event.assert_called_once()
+
+    @override_settings(
+        HONEYBADGER={
+            "INSIGHTS_ENABLED": True,
+            "INSIGHTS_CONFIG": {"django": {"disabled": True}},
+        }
+    )
+    @patch("honeybadger.contrib.django.honeybadger.event")
+    def test_event_disabled_with_disabled_config(self, mock_event):
+        request = self.rf.get("/plain_view/")
+        request.resolver_match = self.url.resolve("plain_view")
+        mw = DjangoHoneybadgerMiddleware(lambda req: Mock())
+        mw(request)
+        mock_event.assert_not_called()
+
+    @override_settings(
+        HONEYBADGER={
+            "INSIGHTS_ENABLED": True,
+            "INSIGHTS_CONFIG": {"django": {"include_params": True}},
+        }
+    )
+    @patch("honeybadger.contrib.django.honeybadger.event")
+    def test_event_includes_filtered_params(self, mock_event):
+        request = self.rf.get("/plain_view/", {"password": "hide", "b": 2})
+        request.resolver_match = self.url.resolve("plain_view")
+        mw = DjangoHoneybadgerMiddleware(lambda req: Mock())
+        mw(request)
+        mock_event.assert_called_once()
+        event_name, data = mock_event.call_args[0]
+        self.assertEqual(data["params"], {"b": "2"})
