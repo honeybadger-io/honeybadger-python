@@ -61,7 +61,9 @@ class ASGIEventPayloadTestCase(unittest.TestCase):
     @with_config({"insights_enabled": True})
     @mock.patch("honeybadger.contrib.asgi.honeybadger.event")
     async def test_success_event_payload(self, event):
-        app = TestClient(contrib.ASGIHoneybadger(asgi_app(), api_key="abcd"))
+        app = TestClient(
+            contrib.ASGIHoneybadger(asgi_app(), api_key="abcd", insights_enabled=True)
+        )
         # even if there’s a query, url stays just the path
         await app.get("/hello?x=1")
         event.assert_called_once()
