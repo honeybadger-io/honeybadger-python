@@ -42,7 +42,7 @@ class EventsWorker:
 
         self._thread = threading.Thread(
             target=self._run,
-            name="honeybadger-events-worker-{os.getpid()}",
+            name=f"honeybadger-events-worker-{os.getpid()}",
             daemon=True,
         )
         self._thread.start()
