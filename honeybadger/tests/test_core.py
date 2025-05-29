@@ -517,3 +517,47 @@ def test_notify_with_before_notify_changes():
             context=dict(bar="foo"),
             tags="tag1",
         )
+
+
+@pytest.mark.parametrize(
+    "sample_rate,expected_calls",
+    [
+        (0, 0),  # Never send
+        (100, 1),  # Always send
+        (-10, 0),  # Negative = never send
+    ],
+)
+def test_event_sampling_rates(sample_rate, expected_calls):
+    """Test various sample rates"""
+    mock_events_worker = MagicMock()
+    hb = Honeybadger()
+    hb.events_worker = mock_events_worker
+    hb.configure(api_key="aaa", force_report_data=True, events_sample_rate=sample_rate)
+
+    hb.event("test.event", {"data": "test"})
+    assert mock_events_worker.push.call_count == expected_calls
+
+
+def test_event_sampling_precedence_and_cleanup():
+    """Test that _hb overrides work and get stripped from payload"""
+    mock_events_worker = MagicMock()
+    hb = Honeybadger()
+    hb.events_worker = mock_events_worker
+    hb.configure(
+        api_key="aaa", force_report_data=True, events_sample_rate=0
+    )  # Global: never send
+
+    # Context override: should send
+    hb.set_event_context(_hb={"sample_rate": 100}, service="web")
+    hb.event("test.event1", {"data": "test1"})
+    assert mock_events_worker.push.call_count == 1
+
+    # Event data override: should not send (overrides context)
+    hb.event("test.event2", {"data": "test2", "_hb": {"sample_rate": 0}})
+    assert mock_events_worker.push.call_count == 1  # Still 1, no new call
+
+    # Verify _hb is stripped and other data preserved
+    payload = mock_events_worker.push.call_args[0][0]
+    assert "_hb" not in payload
+    assert payload["service"] == "web"
+    assert payload["data"] == "test1"
