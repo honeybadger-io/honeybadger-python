@@ -1,8 +1,11 @@
 import time
+import logging
 
 from honeybadger import honeybadger
 from honeybadger.plugins import Plugin, default_plugin_manager
 from honeybadger.utils import filter_dict, extract_honeybadger_config, get_duration
+
+logger = logging.getLogger(__name__)
 
 
 class CeleryPlugin(Plugin):
@@ -182,7 +185,11 @@ class CeleryHoneybadger(object):
             task_failure.disconnect(self._on_task_failure)
 
         if honeybadger.config.insights_enabled:
-            from celery.signals import task_prerun, worker_process_init, before_task_publish
+            from celery.signals import (
+                task_prerun,
+                worker_process_init,
+                before_task_publish,
+            )
 
             task_prerun.disconnect(self._on_task_prerun)
             worker_process_init.disconnect(self._on_worker_process_init, weak=False)
