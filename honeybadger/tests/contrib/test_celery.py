@@ -161,10 +161,10 @@ def test_context_propagation(mock_set_context, mock_get_context, mock_event):
     headers = {}
     hb._on_before_task_publish(headers=headers)
 
-    assert headers["honeybadger_context"] == test_context
+    assert headers["honeybadger_event_context"] == test_context
 
     task = MagicMock()
-    task.request.honeybadger_context = test_context
+    task.request.honeybadger_event_context = test_context
 
     hb._on_task_prerun("test_task_id", task)
 
