@@ -1,3 +1,4 @@
+import os
 import time
 import threading
 import logging
@@ -41,11 +42,28 @@ class EventsWorker:
 
         self._thread = threading.Thread(
             target=self._run,
-            name="honeybadger-events-worker",
+            name="honeybadger-events-worker-{os.getpid()}",
             daemon=True,
         )
         self._thread.start()
         self.log.debug("Events worker started")
+
+    def restart(self):
+        """Restart the batch worker thread (useful after process forking)"""
+        if hasattr(self, "_thread") and self._thread and self._thread.is_alive():
+            self.shutdown()
+
+        # Reset state
+        self._stop = False
+
+        self._thread = threading.Thread(
+            target=self._run,
+            name=f"honeybadger-events-worker-{os.getpid()}",
+            daemon=True,
+        )
+        self._thread.start()
+
+        return self._thread.is_alive()
 
     def push(self, event: Event) -> bool:
         with self._cond:

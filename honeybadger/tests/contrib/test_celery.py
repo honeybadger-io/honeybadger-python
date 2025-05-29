@@ -89,52 +89,98 @@ def setup_celery_hb():
     return app, hb
 
 
-@patch("celery.events.EventReceiver")
 @patch("honeybadger.honeybadger.event")
-def test_finished_task_event(mock_event, mock_event_receiver):
-    app, hb = setup_celery_hb()
+def test_finished_task_event(mock_event):
+    _, hb = setup_celery_hb()
 
-    assert mock_event_receiver.call_count == 1
-    assert (
-        mock_event_receiver.call_args[1]["handlers"]["task-finished"]
-        == hb._on_task_finished
-    )
+    task = MagicMock()
+    task.name = "test_task"
+    task.request.retries = 0
+    task.request.group = None
+    task.request.args = []
+    task.request.kwargs = {}
 
-    hb._on_task_finished({"payload": {"data": "test_task_id"}})
+    hb._on_task_prerun("test_task_id", task)
+    hb._on_task_postrun("test_task_id", task, state="SUCCESS")
 
+    # Verify honeybadger.event was called directly
     assert mock_event.call_count == 1
     assert mock_event.call_args[0][0] == "celery.task_finished"
-    assert mock_event.call_args[0][1] == {"data": "test_task_id"}
+
+    payload = mock_event.call_args[1]["payload"]
+    assert payload["task_id"] == "test_task_id"
+    assert payload["task_name"] == "test_task"
+    assert payload["state"] == "SUCCESS"
 
     hb.tearDown()
 
 
 @with_config({"insights_config": {"celery": {"include_args": True}}})
-def test_includes_task_args():
-    app, hb = setup_celery_hb()
+@patch("honeybadger.honeybadger.event")
+def test_includes_task_args(mock_event):
+    _, hb = setup_celery_hb()
+
     task = MagicMock()
     task.request.group = None
     task.name = "test_task"
-    task.request.name = "test_task"
     task.request.retries = 1
     task.request.args = [1, 2]
     task.request.kwargs = {"foo": "bar", "password": "secret"}
 
-    hb._on_task_prerun("test_task_id")
-    hb._on_task_postrun("test_task_id", task, None, state="SUCCESS")
+    hb._on_task_prerun("test_task_id", task)
+    hb._on_task_postrun("test_task_id", task, state="SUCCESS")
 
-    task_arg = lambda x: task.send_event.call_args[1]["payload"][x]
+    assert mock_event.call_count == 1
+    assert mock_event.call_args[0][0] == "celery.task_finished"
 
-    assert task.send_event.call_count == 1
-    assert task.send_event.call_args[0][0] == "task-finished"
-    assert task_arg("task_id") == "test_task_id"
-    assert task_arg("task_name") == "test_task"
-    assert task_arg("args") == [1, 2]
-    assert task_arg("kwargs") == {"foo": "bar"}
-    assert task_arg("retries") == 1
-    assert task_arg("state") == "SUCCESS"
-    assert task_arg("group") is None
-    assert task_arg("duration") > 0
+    payload = mock_event.call_args[1]["payload"]
+
+    assert payload["task_id"] == "test_task_id"
+    assert payload["task_name"] == "test_task"
+    assert payload["args"] == [1, 2]
+    assert payload["kwargs"] == {"foo": "bar"}  # password should be filtered out
+    assert payload["retries"] == 1
+    assert payload["state"] == "SUCCESS"
+    assert payload["group"] is None
+    assert payload["duration"] > 0
+
+    hb.tearDown()
+
+
+# Test context propagation
+@patch("honeybadger.honeybadger.event")
+@patch("honeybadger.honeybadger._get_event_context")
+@patch("honeybadger.honeybadger.set_event_context")
+def test_context_propagation(mock_set_context, mock_get_context, mock_event):
+    """Test that context is properly propagated from publish to execution"""
+    _, hb = setup_celery_hb()
+
+    test_context = {"request_id": "test-123", "user_id": "456"}
+    mock_get_context.return_value = test_context
+
+    headers = {}
+    hb._on_before_task_publish(headers=headers)
+
+    assert headers["honeybadger_context"] == test_context
+
+    task = MagicMock()
+    task.request.honeybadger_context = test_context
+
+    hb._on_task_prerun("test_task_id", task)
+
+    mock_set_context.assert_called_once_with(test_context)
+
+    hb.tearDown()
+
+
+@patch("honeybadger.honeybadger.events_worker")
+def test_worker_process_init(mock_events_worker):
+    """Test that events worker is restarted in new worker process"""
+    _, hb = setup_celery_hb()
+
+    hb._on_worker_process_init()
+
+    mock_events_worker.restart.assert_called_once()
 
     hb.tearDown()
 

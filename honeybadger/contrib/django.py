@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 import re
 import time
+import uuid
 
 from six import iteritems
 
@@ -138,6 +139,7 @@ class DjangoHoneybadgerMiddleware(object):
         set_request(request)
         start_time = time.time()
         honeybadger.begin_request(request)
+        self._set_request_id(request)
         response = self.get_response(request)
 
         if (
@@ -150,6 +152,18 @@ class DjangoHoneybadgerMiddleware(object):
         clear_request()
 
         return response
+
+    def _set_request_id(self, request):
+        # Attempt to get request ID from various sources
+        request_id = (
+            getattr(request, "id", None)
+            or getattr(request, "request_id", None)
+            or request.headers.get("X-Request-ID", None)
+        )
+        if not request_id:
+            request_id = str(uuid.uuid4())
+
+        honeybadger.set_event_context(request_id=request_id)
 
     def _patch_cursor(self):
         from django.db.backends.utils import CursorWrapper

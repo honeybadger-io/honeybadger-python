@@ -3,6 +3,7 @@ from contextvars import ContextVar
 
 import logging
 import time
+import uuid
 
 from honeybadger import honeybadger
 from honeybadger.plugins import Plugin, default_plugin_manager
@@ -200,6 +201,12 @@ class FlaskHoneybadger(object):
 
     def _handle_request_started(self, sender, *args, **kwargs):
         from flask import request
+
+        request_id = request.headers.get("X-Request-ID")
+        if not request_id:
+            request_id = str(uuid.uuid4())
+
+        honeybadger.set_event_context(request_id=request_id)
 
         _request_info.set(
             {

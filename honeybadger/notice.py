@@ -11,6 +11,7 @@ class Notice(object):
         self.fingerprint = kwargs.get("fingerprint", None)
         self.config = kwargs.get("config", None)
         self.context = kwargs.get("context", {})
+        self.request_id = kwargs.get("request_id", None)
         self.tags = self._construct_tags(kwargs.get("tags", []))
 
         self._process_exception()
@@ -34,6 +35,7 @@ class Notice(object):
             context=self.context,
             tags=self.tags,
             config=self.config,
+            correlation_context=self._correlation_context(),
         )
 
     def excluded_exception(self):
@@ -48,6 +50,11 @@ class Notice(object):
             ):
                 return True
         return False
+
+    def _correlation_context(self):
+        if self.request_id:
+            return {"request_id": self.request_id}
+        return None
 
     def _construct_tags(self, tags):
         """
