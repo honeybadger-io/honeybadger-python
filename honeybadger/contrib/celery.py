@@ -105,7 +105,7 @@ class CeleryHoneybadger(object):
         try:
             honeybadger.events_worker.restart()
         except Exception as e:
-            print(f"Warning: Failed to restart Honeybadger events worker: {e}")
+            logger.warning(f"Warning: Failed to restart Honeybadger events worker: {e}")
 
     def _on_before_task_publish(self, sender=None, body=None, headers=None, **kwargs):
         # Inject Honeybadger event context into task headers
