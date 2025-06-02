@@ -1,6 +1,7 @@
 import unittest
 import json
 import importlib
+import uuid
 from mock import patch
 from mock import Mock
 import sys
@@ -335,3 +336,32 @@ class DjangoMiddlewareEventTestCase(SimpleTestCase):
         mock_event.assert_called_once()
         event_name, data = mock_event.call_args[0]
         self.assertEqual(data["params"], {"b": "2"})
+
+    @patch("honeybadger.contrib.django.honeybadger.set_event_context")
+    def test_existing_request_id_header(self, mock_set_event_context):
+        req_id = "abc-123"
+        request = self.rf.get("/foo", headers={"x-request-id": req_id})
+
+        def get_response(req):
+            return object()
+
+        mw = DjangoHoneybadgerMiddleware(get_response)
+        mw(request)
+
+        # Assert request_id propagated
+        mock_set_event_context.assert_called_once_with(request_id=req_id)
+
+    @patch("honeybadger.contrib.django.honeybadger.set_event_context")
+    def test_missing_request_id_header(self, mock_set_event_context):
+        request = self.rf.get("/foo")
+
+        def get_response(req):
+            return object()
+
+        mw = DjangoHoneybadgerMiddleware(get_response)
+        mw(request)
+
+        # Should be a UUID
+        request_id = mock_set_event_context.call_args[1]["request_id"]
+        uuid_obj = uuid.UUID(request_id)
+        assert isinstance(uuid_obj, uuid.UUID)

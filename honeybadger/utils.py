@@ -1,5 +1,6 @@
 import json
 import time
+import re
 
 
 class StringReprJSONEncoder(json.JSONEncoder):
@@ -87,3 +88,13 @@ def get_duration(start_time):
         return None
 
     return round((time.time() - start_time) * 1000, 4)
+
+
+def sanitize_request_id(request_id):
+    """Sanitize a Request ID by keeping only alphanumeric characters and hyphens."""
+    if not request_id:
+        return None
+
+    sanitized = re.sub(r"[^a-zA-Z0-9-]", "", request_id.strip())[:255]
+
+    return sanitized or None

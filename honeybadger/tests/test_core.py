@@ -310,6 +310,19 @@ def test_notify_context_merging():
         )
 
 
+def test_notify_with_request_id():
+    def test_payload(request):
+        payload = json.loads(request.data.decode("utf-8"))
+        assert payload["correlation_context"]["request_id"] == "12345"
+
+    hb = Honeybadger()
+    hb.set_event_context(request_id="12345")
+
+    with mock_urlopen(test_payload):
+        hb.configure(api_key="aaa", force_report_data=True)
+        hb.notify(error_class="Exception", error_message="Test message.")
+
+
 def test_event_with_two_params():
     mock_events_worker = MagicMock()
 
