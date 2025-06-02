@@ -98,3 +98,16 @@ def test_notice_with_multiple_tags():
     assert "tag1" in payload["error"]["tags"]
     assert "tag2" in payload["error"]["tags"]
     assert "tag3" in payload["error"]["tags"]
+
+
+def test_notice_with_request_id():
+    config = Configuration()
+
+    notice = Notice(
+        error_class="TestError",
+        error_message="Test message",
+        request_id="12345",
+        config=config,
+    )
+    payload = notice.payload
+    assert payload["correlation_context"]["request_id"] == "12345"

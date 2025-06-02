@@ -2,6 +2,7 @@ import unittest
 import importlib
 
 import sys
+import uuid
 from mock import patch
 
 from honeybadger import honeybadger
@@ -438,3 +439,19 @@ class FlaskHoneybadgerInsightsTestCase(unittest.TestCase):
 
         _, payload = mock_event.call_args[0]
         self.assertEqual(payload["params"], {"id": "abc123"})
+
+    @patch("honeybadger.contrib.flask.honeybadger.set_event_context")
+    def test_request_id_set_from_header(self, mock_set_event_context):
+        resp = self.client.get("/ping", headers={"X-Request-ID": "test-request-123"})
+        self.assertEqual(resp.status_code, 201)
+
+        mock_set_event_context.assert_called_once_with(request_id="test-request-123")
+
+    @patch("honeybadger.contrib.flask.honeybadger.set_event_context")
+    def test_request_id_generated_when_missing(self, mock_set_event_context):
+        resp = self.client.get("/ping")
+        self.assertEqual(resp.status_code, 201)
+
+        request_id = mock_set_event_context.call_args[1]["request_id"]
+        uuid_obj = uuid.UUID(request_id)
+        assert isinstance(uuid_obj, uuid.UUID)

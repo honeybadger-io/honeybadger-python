@@ -1,4 +1,4 @@
-from honeybadger.utils import filter_dict, filter_env_vars
+from honeybadger.utils import filter_dict, filter_env_vars, sanitize_request_id
 
 
 def test_filter_dict():
@@ -69,3 +69,14 @@ def test_filter_env_vars_with_non_dict():
 
 def test_filter_env_vars_empty_dict():
     assert filter_env_vars({}) == {}
+
+
+def test_sanitize_request_id():
+    assert sanitize_request_id("abc123-def456") == "abc123-def456"
+    assert sanitize_request_id("abc_123@def#456") == "abc123def456"
+    assert sanitize_request_id("a" * 300) == "a" * 255
+    assert sanitize_request_id("  abc123  ") == "abc123"
+    assert sanitize_request_id("@#$%^&*()") is None
+    assert sanitize_request_id(None) is None
+    assert sanitize_request_id("") is None
+    assert sanitize_request_id("   ") is None

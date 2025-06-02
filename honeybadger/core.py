@@ -83,6 +83,8 @@ class Honeybadger(object):
         merged_ctx = {**base, **(context or {})}
         merged_tags = list({*tag_ctx, *(tags or [])})
 
+        request_id = self._get_event_context().get("request_id", None)
+
         notice = Notice(
             exception=exception,
             error_class=error_class,
@@ -91,6 +93,7 @@ class Honeybadger(object):
             fingerprint=fingerprint,
             tags=merged_tags,
             config=self.config,
+            request_id=request_id,
         )
         return self._send_notice(notice)
 

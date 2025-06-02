@@ -237,3 +237,13 @@ def test_create_payload_with_local_variables():
         exception = Exception("Test")
         payload = create_payload(exception, config=config)
         assert payload["request"]["local_variables"] == test_local_variable
+
+
+def test_create_payload_with_correlation_context():
+    config = Configuration()
+    exception = Exception("Test")
+    request_id = "12345"
+    payload = create_payload(
+        exception, config=config, correlation_context={"request_id": request_id}
+    )
+    assert payload["correlation_context"]["request_id"] == request_id
