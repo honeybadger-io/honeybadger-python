@@ -12,6 +12,7 @@ from honeybadger.utils import (
     filter_env_vars,
     get_duration,
     extract_honeybadger_config,
+    sanitize_request_id,
 )
 from honeybadger.contrib.db import DBHoneybadger
 from six import iteritems
@@ -202,7 +203,7 @@ class FlaskHoneybadger(object):
     def _handle_request_started(self, sender, *args, **kwargs):
         from flask import request
 
-        request_id = request.headers.get("X-Request-ID")
+        request_id = sanitize_request_id(request.headers.get("X-Request-ID"))
         if not request_id:
             request_id = str(uuid.uuid4())
 

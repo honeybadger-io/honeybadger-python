@@ -7,7 +7,12 @@ from six import iteritems
 
 from honeybadger import honeybadger
 from honeybadger.plugins import Plugin, default_plugin_manager
-from honeybadger.utils import filter_dict, filter_env_vars, get_duration
+from honeybadger.utils import (
+    filter_dict,
+    filter_env_vars,
+    get_duration,
+    sanitize_request_id,
+)
 from honeybadger.contrib.db import DBHoneybadger
 
 try:
@@ -160,6 +165,7 @@ class DjangoHoneybadgerMiddleware(object):
             or getattr(request, "request_id", None)
             or request.headers.get("X-Request-ID", None)
         )
+        request_id = sanitize_request_id(request_id)
         if not request_id:
             request_id = str(uuid.uuid4())
 
