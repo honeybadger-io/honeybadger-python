@@ -83,7 +83,7 @@ class Configuration(object):
     def is_dev(self):
         """Returns wether you are in a dev environment or not
 
-        Defaul dev environments are defined in the constant DEVELOPMENT_ENVIRONMENTS
+        Default dev environments are defined in the constant DEVELOPMENT_ENVIRONMENTS
 
         :rtype: bool
         """
