@@ -4,6 +4,9 @@ import sys
 import logging
 import datetime
 import atexit
+import uuid
+import hashlib
+
 from typing import Optional, Dict, Any, List
 
 from honeybadger.plugins import default_plugin_manager
@@ -132,6 +135,13 @@ class Honeybadger(object):
 
         final_payload = {**self._get_event_context(), **payload}
 
+        # Check sampling on the final merged payload
+        if not self._should_sample_event(final_payload):
+            return
+
+        # Strip internal _hb metadata before sending
+        final_payload.pop("_hb", None)
+
         return self.events_worker.push(final_payload)
 
     def configure(self, **kwargs):
@@ -148,6 +158,27 @@ class Honeybadger(object):
 
         if self.config.is_aws_lambda_environment:
             default_plugin_manager.register(contrib.AWSLambdaPlugin())
+
+    def _should_sample_event(self, payload):
+        """
+        Determine if an event should be sampled based on sample rate and payload metadata.
+        Returns True if the event should be sent, False if it should be skipped.
+        """
+        # Get sample rate from payload _hb override or global config
+        hb_metadata = payload.get("_hb", {})
+        sample_rate = hb_metadata.get("sample_rate", self.config.events_sample_rate)
+
+        if sample_rate >= 100:
+            return True
+
+        if sample_rate <= 0:
+            return False
+
+        sampling_key = payload.get("request_id")
+        if not sampling_key:
+            sampling_key = str(uuid.uuid4())
+        hash_value = int(hashlib.md5(sampling_key.encode()).hexdigest(), 16)
+        return (hash_value % 100) < sample_rate
 
     # Error context
     #

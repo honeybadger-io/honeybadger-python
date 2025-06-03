@@ -104,6 +104,7 @@ class BaseConfig:
 
     before_event: Callable[[Any], Any] = lambda _: None
 
+    events_sample_rate: int = 100
     events_batch_size: int = 1000
     events_max_queue_size: int = 10_000
     events_timeout: float = 5.0
