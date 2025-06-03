@@ -11,6 +11,7 @@ class Configuration(object):
         ("api_key", str),
         ("project_root", str),
         ("environment", str),
+        ("development_environments", list),
         ("hostname", str),
         ("endpoint", str),
         ("params_filters", list),
@@ -31,6 +32,7 @@ class Configuration(object):
         self.api_key = ""
         self.project_root = os.getcwd()
         self.environment = "production"
+        self.development_environments = self.DEVELOPMENT_ENVIRONMENTS
         self.hostname = socket.gethostname()
         self.endpoint = "https://api.honeybadger.io"
         self.params_filters = [
@@ -81,11 +83,11 @@ class Configuration(object):
     def is_dev(self):
         """Returns wether you are in a dev environment or not
 
-        A dev environment is defined in the constant DEVELOPMENT_ENVIRONMENTS
+        Defaul dev environments are defined in the constant DEVELOPMENT_ENVIRONMENTS
 
         :rtype: bool
         """
-        return self.environment in self.DEVELOPMENT_ENVIRONMENTS
+        return self.environment in self.development_environments
 
     @property
     def is_aws_lambda_environment(self):
