@@ -4,6 +4,7 @@ CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+- Allow overriding development environments (#218)
 
 ## [0.23.1] - 2025-05-23
 - Fix: removes raising an exception in the `Notice` class.
