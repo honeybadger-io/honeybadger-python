@@ -19,14 +19,14 @@ class Notice(object):
         self._process_tags()
 
     def _process_exception(self):
-        if self.exception is None and self.error_class:
+        if self.exception and self.error_message:
+            self.context["error_message"] = self.error_message
+
+        if self.exception is None:
             self.exception = {
                 "error_class": self.error_class,
+                "error_message": self.error_message,
             }
-            if self.error_message:
-                self.exception.update({"error_message": self.error_message})
-        elif self.exception and self.error_message:
-            self.context["error_message"] = self.error_message
 
     def _process_context(self):
         self.context = dict(**self._get_thread_context(), **self.context)
