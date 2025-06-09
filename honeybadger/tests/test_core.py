@@ -279,3 +279,20 @@ def test_notify_with_before_notify_changes():
             context=dict(bar="foo"),
             tags="tag1",
         )
+
+
+def test_notify_with_error_message_only():
+    """Test the case where only an error message is provided"""
+
+    def test_payload(request):
+        payload = json.loads(request.data.decode("utf-8"))
+        # This demonstrates the current bug - NoneType class and None message
+        assert payload["error"]["class"] == "dict"
+        assert payload["error"]["message"] == "Some error message"
+
+    hb = Honeybadger()
+
+    with mock_urlopen(test_payload):
+        hb.configure(api_key="aaa", force_report_data=True)
+        # This should fail according to breaking change, but currently creates malformed payload
+        hb.notify(error_message="Some error message", context={"foo": "bar"})
