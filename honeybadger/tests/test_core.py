@@ -575,6 +575,7 @@ def test_event_sampling_precedence_and_cleanup():
     assert payload["service"] == "web"
     assert payload["data"] == "test1"
 
+
 def test_notify_with_error_message_only():
     """Test the case where only an error message is provided"""
 
