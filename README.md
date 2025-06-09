@@ -483,28 +483,31 @@ To set configuration options, use the `honeybadger.configure` method, like so:
 honeybadger.configure(api_key='{{PROJECT_API_KEY}}', environment='production')
 ```
 
-All of Honeybadger's configuration options can also be set via environment variables with the `HONEYBADGER` prefix (12-factor style). For example, the `api_key` option can be set via the `HONEYBADGER_API_KEY` environment variable.
+Most of Honeybadger's configuration options can also be set via environment variables with the `HONEYBADGER` prefix (12-factor style). For example, the `api_key` option can be set via the `HONEYBADGER_API_KEY` environment variable.
 
 The following options are available to you:
 
-| Name                     | Type   | Default                                                | Example                               | Environment variable                  |
-|--------------------------|--------|--------------------------------------------------------|---------------------------------------|---------------------------------------|
-| api_key                  | `str`  | `""`                                                   | `"badgers"`                           | `HONEYBADGER_API_KEY`                 |
-| project_root             | `str`  | The current working directory                          | `"/path/to/project"`                  | `HONEYBADGER_PROJECT_ROOT`            |
-| environment[^1]          | `str`  | `"production"`                                         | `"staging"`                           | `HONEYBADGER_ENVIRONMENT`             |
-| hostname                 | `str`  | The hostname of the current server.                    | `"badger01"`                          | `HONEYBADGER_HOSTNAME`                |
-| endpoint                 | `str`  | `"https://api.honeybadger.io"`                         | `"https://honeybadger.example.com/"`  | `HONEYBADGER_ENDPOINT`                |
-| params_filters           | `list` | `['password', 'password_confirmation', 'credit_card']` | `['super', 'secret', 'keys']`         | `HONEYBADGER_PARAMS_FILTERS`          |
-| force_report_data        | `bool` | `False`                                                | `True`                                | `HONEYBADGER_FORCE_REPORT_DATA`       |
-| excluded_exceptions      | `list` | `[]`                                                   | `['Http404', 'MyCustomIgnoredError']` | `HONEYBADGER_EXCLUDED_EXCEPTIONS`     |
-| force_sync               | `bool` | `False`                                                | `True`                                | `HONEYBADGER_FORCE_SYNC`              |
-| report_local_variables   | `bool` | `False`                                                | `True`                                | `HONEYBADGER_REPORT_LOCAL_VARIABLES`  |
-| insights_enabled         | `bool` | `False`                                                | `True`                                | `HONEYBADGER_INSIGHTS_ENABLED`        |
-| events_batch_size        | `int`  | `1000`                                                 | `50`                                  | `HONEYBADGER_EVENTS_BATCH_SIZE`       |
-| events_max_queue_size    | `int`  | `10000`                                                | `5000`                                | `HONEYBADGER_EVENTS_MAX_QUEUE_SIZE`   |
-| events_timeout           | `float`| `5.0`                                                  | `1.0`                                 | `HONEYBADGER_EVENTS_TIMEOUT`          |
-| events_max_batch_retries | `int`  | `3`                                                    | `5`                                   | `HONEYBADGER_EVENTS_MAX_BATCH_RETRIES`|
-| events_throttle_wait     | `float`| `60.0`                                                 | `1200.0`                              | `HONEYBADGER_EVENTS_THROTTLE_WAIT`    |
+| Name                     | Type       | Default                                                | Example                               | Environment variable                  |
+|--------------------------|------------|--------------------------------------------------------|---------------------------------------|---------------------------------------|
+| api_key                  | `str`      | `""`                                                   | `"badgers"`                           | `HONEYBADGER_API_KEY`                 |
+| project_root             | `str`      | The current working directory                          | `"/path/to/project"`                  | `HONEYBADGER_PROJECT_ROOT`            |
+| environment[^1]          | `str`      | `"production"`                                         | `"staging"`                           | `HONEYBADGER_ENVIRONMENT`             |
+| development_environments | `list`     | `['development', 'dev', 'test']`                       | `['staging', 'local']`                | `HONEYBADGER_DEVELOPMENT_ENVIRONMENTS`|
+| hostname                 | `str`      | The hostname of the current server.                    | `"badger01"`                          | `HONEYBADGER_HOSTNAME`                |
+| endpoint                 | `str`      | `"https://api.honeybadger.io"`                         | `"https://honeybadger.example.com/"`  | `HONEYBADGER_ENDPOINT`                |
+| params_filters           | `list`     | `['password', 'password_confirmation', 'credit_card']` | `['super', 'secret', 'keys']`         | `HONEYBADGER_PARAMS_FILTERS`          |
+| force_report_data        | `bool`     | `False`                                                | `True`                                | `HONEYBADGER_FORCE_REPORT_DATA`       |
+| before_notify            | `callable` | `lambda notice: notice`                                | `custom_before_notify_function`       | n/a                                   |
+| excluded_exceptions      | `list`     | `[]`                                                   | `['Http404', 'MyCustomIgnoredError']` | `HONEYBADGER_EXCLUDED_EXCEPTIONS`     |
+| force_sync               | `bool`     | `False`                                                | `True`                                | `HONEYBADGER_FORCE_SYNC`              |
+| report_local_variables   | `bool`     | `False`                                                | `True`                                | `HONEYBADGER_REPORT_LOCAL_VARIABLES`  |
+| insights_enabled         | `bool`     | `False`                                                | `True`                                | `HONEYBADGER_INSIGHTS_ENABLED`        |
+| before_event             | `callable` | `lambda notice: None`                                  | `custom_before_notify_function`       | n/a                                   |
+| events_batch_size        | `int`      | `1000`                                                 | `50`                                  | `HONEYBADGER_EVENTS_BATCH_SIZE`       |
+| events_max_queue_size    | `int`      | `10000`                                                | `5000`                                | `HONEYBADGER_EVENTS_MAX_QUEUE_SIZE`   |
+| events_timeout           | `float`    | `5.0`                                                  | `1.0`                                 | `HONEYBADGER_EVENTS_TIMEOUT`          |
+| events_max_batch_retries | `int`      | `3`                                                    | `5`                                   | `HONEYBADGER_EVENTS_MAX_BATCH_RETRIES`|
+| events_throttle_wait     | `float`    | `60.0`                                                 | `1200.0`                              | `HONEYBADGER_EVENTS_THROTTLE_WAIT`    |
 
 [^1]: Honeybadger will try to infer the correct environment when possible. For example, in the case of the Django integration, if Django settings are set to `DEBUG = True`, the environment will default to `development`.
 

@@ -93,6 +93,9 @@ class BaseConfig:
             "CSRF_COOKIE",
         ]
     )
+    development_environments: List[str] = field(
+        default_factory=lambda: BaseConfig.DEVELOPMENT_ENVIRONMENTS
+    )
     force_report_data: bool = False
     force_sync: bool = False
     excluded_exceptions: List[str] = field(default_factory=list)
@@ -155,11 +158,11 @@ class Configuration(BaseConfig):
     def is_dev(self):
         """Returns wether you are in a dev environment or not
 
-        A dev environment is defined in the constant DEVELOPMENT_ENVIRONMENTS
+        Default dev environments are defined in the constant DEVELOPMENT_ENVIRONMENTS
 
         :rtype: bool
         """
-        return self.environment in self.DEVELOPMENT_ENVIRONMENTS
+        return self.environment in self.development_environments
 
     @property
     def is_aws_lambda_environment(self):

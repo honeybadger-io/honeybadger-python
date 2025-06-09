@@ -5,6 +5,12 @@ adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.1] - 2025-06-09
+- Fix: Always create error dictionary if exception is not provided (#222)
+
+## [1.0.0] - 2025-06-05
+- Allow overriding development environments (#218)
+
 ## [0.23.1] - 2025-05-23
 - Fix: removes raising an exception in the `Notice` class.
 - Fix: `fake_connection` returns same type as `connection` (#212)

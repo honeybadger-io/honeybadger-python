@@ -79,6 +79,12 @@ def test_valid_dev_environments():
     assert set(Configuration.DEVELOPMENT_ENVIRONMENTS) == set(valid_dev_environments)
 
 
+def test_override_development_environments():
+    custom_dev_envs = ["local", "staging"]
+    c = Configuration(development_environments=custom_dev_envs)
+    assert c.development_environments == custom_dev_envs
+
+
 def test_is_dev_true_for_dev_environments():
     for env in Configuration.DEVELOPMENT_ENVIRONMENTS:
         c = Configuration(environment=env)
@@ -87,6 +93,26 @@ def test_is_dev_true_for_dev_environments():
 
 def test_is_dev_false_for_non_dev_environments():
     c = Configuration(environment="production")
+    assert c.is_dev() == False
+
+
+def test_is_dev_true_for_custom_dev_environments():
+    custom_dev_envs = ["local", "staging"]
+    c = Configuration(environment="local", development_environments=custom_dev_envs)
+    assert c.is_dev() == True
+
+    c = Configuration(environment="staging", development_environments=custom_dev_envs)
+    assert c.is_dev() == True
+
+
+def test_is_dev_false_for_custom_non_dev_environments():
+    custom_dev_envs = ["local", "staging"]
+    c = Configuration(
+        environment="production", development_environments=custom_dev_envs
+    )
+    assert c.is_dev() == False
+
+    c = Configuration(environment="qa", development_environments=custom_dev_envs)
     assert c.is_dev() == False
 
 
