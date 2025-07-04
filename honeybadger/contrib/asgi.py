@@ -1,9 +1,14 @@
 from honeybadger import honeybadger, plugins, utils
+from honeybadger.utils import get_duration
+import logging
+import time
 import urllib
 import inspect
 import asyncio
 import json
 from typing import Dict, Any, Optional, Callable, Awaitable, Union, Tuple, List, cast
+
+logger = logging.getLogger(__name__)
 
 
 def _looks_like_asgi3(app) -> bool:
@@ -104,23 +109,63 @@ class ASGIHoneybadger(plugins.Plugin):
 
     def _run_asgi2(self, scope):
         async def inner(receive, send):
-            return await self._run_app(scope, lambda: self.app(scope)(receive, send))
+            return await self._run_request(scope, receive, send, self.app(scope))
 
         return inner
 
     async def _run_asgi3(self, scope, receive, send):
-        return await self._run_app(scope, lambda: self.app(scope, receive, send))
+        return await self._run_request(
+            scope, receive, send, lambda recv, snd: self.app(scope, recv, snd)
+        )
 
-    async def _run_app(self, scope, callback):
+    async def _run_request(self, scope, receive, send, app_callable):
         # TODO: Should we check recursive middleware stacks?
         # See: https://github.com/getsentry/sentry-python/blob/master/sentry_sdk/integrations/asgi.py#L112
+        start = time.time()
+        status = None
+
+        async def send_wrapper(message):
+            nonlocal status
+            if message.get("type") == "http.response.start":
+                status = message.get("status")
+            await send(message)
+
         try:
-            return await callback()
+            return await app_callable(receive, send_wrapper)
         except Exception as exc:
             honeybadger.notify(exception=exc, context=_as_context(scope))
-            raise exc from None
+            raise
         finally:
-            honeybadger.reset_context()
+            try:
+                asgi_config = honeybadger.config.insights_config.asgi
+                if honeybadger.config.insights_enabled and not asgi_config.disabled:
+                    payload = {
+                        "method": scope.get("method"),
+                        "path": scope.get("path"),
+                        "status": status,
+                        "duration": get_duration(start),
+                    }
+
+                    if asgi_config.include_params:
+                        raw_qs = scope.get("query_string", b"")
+                        params = {}
+                        if raw_qs:
+                            parsed = urllib.parse.parse_qs(raw_qs.decode())
+                            for key, values in parsed.items():
+                                params[key] = values[0] if len(values) == 1 else values
+
+                        payload["params"] = utils.filter_dict(
+                            params,
+                            honeybadger.config.params_filters,
+                            remove_keys=True,
+                        )
+
+                    honeybadger.event("asgi.request", payload)
+                honeybadger.reset_context()
+            except Exception as e:
+                logger.warning(
+                    f"Exception while sending Honeybadger event: {e}", exc_info=True
+                )
 
     def supports(self, config, context):
         return context.get("asgi") is not None

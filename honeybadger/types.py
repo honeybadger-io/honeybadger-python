@@ -1,6 +1,6 @@
 from enum import Enum
 from dataclasses import dataclass
-from typing import Optional, Protocol, Any, Dict
+from typing import Optional, Any, Dict
 
 
 class EventsSendStatus(Enum):

@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import os
 import pytest
+import logging
 
 from honeybadger.config import Configuration
 
@@ -36,11 +37,39 @@ def test_config_bool_types_are_accurate():
     assert c.force_report_data == True
 
 
-def test_can_only_set_valid_options():
-    c = Configuration(foo="bar")
-    with pytest.raises(AttributeError):
-        # pylint: disable-next=no-member
-        print(c.foo)
+def test_can_only_set_valid_options(caplog):
+    with caplog.at_level(logging.WARNING):
+        try:
+            Configuration(foo="bar")
+        except AttributeError:
+            pass
+    assert any(
+        "Unknown Configuration option" in msg for msg in caplog.text.splitlines()
+    )
+
+
+def test_is_okay_with_unknown_env_var():
+    os.environ["HONEYBADGER_FOO"] = "bar"
+    try:
+        Configuration()
+    except Exception:
+        pytest.fail("This should fail silently.")
+
+
+def test_nested_dataclass_raises_for_invalid_key(caplog):
+    c = Configuration(insights_config={})
+    with caplog.at_level(logging.WARNING):
+        c.set_config_from_dict({"insights_config": {"db": {"bogus": True}}})
+    assert any("Unknown DBConfig option" in msg for msg in caplog.text.splitlines())
+
+
+def test_set_config_from_dict_raises_for_unknown_key(caplog):
+    c = Configuration()
+    with caplog.at_level(logging.WARNING):
+        c.set_config_from_dict({"does_not_exist": 123})
+    assert any(
+        "Unknown Configuration option" in msg for msg in caplog.text.splitlines()
+    )
 
 
 def test_valid_dev_environments():
@@ -98,3 +127,30 @@ def test_configure_before_notify():
 
     c = Configuration(before_notify=before_notify_callback)
     assert c.before_notify == before_notify_callback
+
+
+def test_configure_nested_insights_config():
+    c = Configuration(insights_config={"db": {"disabled": True}})
+    assert c.insights_config.db.disabled == True
+
+
+def test_configure_throws_for_invalid_insights_config(caplog):
+    with caplog.at_level(logging.WARNING):
+        Configuration(insights_config={"foo": "bar"})
+    assert any(
+        "Unknown InsightsConfig option" in msg for msg in caplog.text.splitlines()
+    )
+
+
+def test_configure_merges_insights_config():
+    c = Configuration(api_key="test", insights_config={})
+
+    c.set_config_from_dict({"insights_config": {"db": {"include_params": True}}})
+    assert hasattr(c.insights_config, "db")
+    assert c.insights_config.db.include_params is True
+
+    c.set_config_from_dict({"insights_config": {"celery": {"disabled": True}}})
+    assert hasattr(c.insights_config, "celery")
+    assert c.insights_config.celery.disabled is True
+
+    assert c.insights_config.db.include_params is True

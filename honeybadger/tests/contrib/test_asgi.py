@@ -3,7 +3,11 @@ import unittest
 from async_asgi_testclient import TestClient  # type: ignore
 import aiounittest
 import mock
+
+from honeybadger import honeybadger
 from honeybadger import contrib
+from honeybadger.config import Configuration
+from honeybadger.tests.utils import with_config
 
 
 class SomeError(Exception):
@@ -50,3 +54,50 @@ class ASGIPluginTestCase(unittest.TestCase):
     async def test_should_not_notify_exception(self, hb):
         response = await self.client.get("/")
         hb.notify.assert_not_called()
+
+
+class ASGIEventPayloadTestCase(unittest.TestCase):
+    @aiounittest.async_test
+    @with_config({"insights_enabled": True})
+    @mock.patch("honeybadger.contrib.asgi.honeybadger.event")
+    async def test_success_event_payload(self, event):
+        app = TestClient(
+            contrib.ASGIHoneybadger(asgi_app(), api_key="abcd", insights_enabled=True)
+        )
+        # even if there’s a query, url stays just the path
+        await app.get("/hello?x=1")
+        event.assert_called_once()
+        name, payload = event.call_args.args
+
+        self.assertEqual(name, "asgi.request")
+        self.assertEqual(payload["method"], "GET")
+        self.assertEqual(payload["path"], "/hello")
+        self.assertEqual(payload["status"], 200)
+        self.assertIsInstance(payload["duration"], float)
+
+    @aiounittest.async_test
+    @with_config(
+        {"insights_enabled": True, "insights_config": {"asgi": {"disabled": True}}}
+    )
+    @mock.patch("honeybadger.contrib.asgi.honeybadger.event")
+    async def test_disabled_by_insights_config(self, event):
+        app = TestClient(contrib.ASGIHoneybadger(asgi_app(), api_key="abcd"))
+        await app.get("/hello?x=1")
+        event.assert_not_called()
+
+    @aiounittest.async_test
+    @with_config(
+        {
+            "insights_enabled": True,
+            "insights_config": {"asgi": {"include_params": True}},
+        }
+    )
+    @mock.patch("honeybadger.contrib.asgi.honeybadger.event")
+    async def test_disable_insights(self, event):
+        app = TestClient(
+            contrib.ASGIHoneybadger(asgi_app(), api_key="abcd", insights_enabled=True)
+        )
+        await app.get("/hello?x=1&password=secret&y=2&y=3")
+        event.assert_called_once()
+        name, payload = event.call_args.args
+        self.assertEqual(payload["params"], {"x": "1", "y": ["2", "3"]})

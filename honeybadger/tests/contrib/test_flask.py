@@ -2,11 +2,13 @@ import unittest
 import importlib
 
 import sys
+import uuid
 from mock import patch
 
 from honeybadger import honeybadger
 from honeybadger.config import Configuration
 from honeybadger.contrib.flask import FlaskPlugin, FlaskHoneybadger
+from honeybadger.tests.utils import with_config
 
 PYTHON_VERSION = sys.version_info[0:2]
 
@@ -353,3 +355,103 @@ class FlaskHoneybadgerTestCase(unittest.TestCase):
 
         self.assert_called_with_exception_type(mock_hb, ZeroDivisionError)
         self.assertEqual(2, mock_hb.reset_context.call_count)
+
+
+class FlaskHoneybadgerInsightsTestCase(unittest.TestCase):
+    def setUp(self):
+        import flask
+
+        self.app = flask.Flask(__name__)
+        # minimal honeybadger config
+        self.app.config.update(
+            {
+                "HONEYBADGER_INSIGHTS_ENABLED": True,
+                "HONEYBADGER_API_KEY": "test",
+                "HONEYBADGER_ENVIRONMENT": "test",
+            }
+        )
+        # install the extension (hooks get registered here)
+        FlaskHoneybadger(self.app)
+
+        # a simple endpoint to drive requests
+        @self.app.route("/ping", methods=["GET", "POST"])
+        def ping():
+            return "pong", 201
+
+        self.client = self.app.test_client()
+
+    @patch("honeybadger.contrib.flask.honeybadger.event")
+    def test_insights_event_on_get(self, mock_event):
+        resp = self.client.get("/ping?foo=bar")
+        self.assertEqual(resp.status_code, 201)
+        # should fire exactly once per request
+        self.assertEqual(mock_event.call_count, 1)
+
+        name, payload = mock_event.call_args[0]
+        self.assertEqual(name, "flask.request")
+        self.assertEqual(payload["method"], "GET")
+        self.assertEqual(payload["path"], "/ping")
+        self.assertEqual(payload["status"], 201)
+        self.assertEqual(payload["view"], "ping")
+        self.assertTrue(isinstance(payload["duration"], float))
+
+    @patch("honeybadger.contrib.flask.honeybadger.event")
+    def test_insights_event_on_post(self, mock_event):
+        resp = self.client.post("/ping", data={"a": "1", "b": "2"})
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(mock_event.call_count, 1)
+
+        _, payload = mock_event.call_args[0]
+        self.assertEqual(payload["method"], "POST")
+        self.assertEqual(payload["path"], "/ping")
+        # query‐string not present → still only path
+        self.assertEqual(payload["view"], "ping")
+        # duration should be non‐negative
+        self.assertGreaterEqual(payload["duration"], 0.0)
+
+    @patch("honeybadger.contrib.flask.honeybadger.event")
+    def test_insights_db_event(self, mock_event):
+        from sqlalchemy import create_engine, text
+
+        engine = create_engine("sqlite:///:memory:")
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+
+        assert mock_event.called
+        event_name, payload = mock_event.call_args[0]
+        assert event_name == "db.query"
+        assert "SELECT 1" in payload["query"]
+        assert "duration" in payload
+
+    @with_config({"insights_config": {"flask": {"disabled": True}}})
+    @patch("honeybadger.contrib.flask.honeybadger.event")
+    def test_insights_no_event_when_disabled(self, mock_event):
+        resp = self.client.get("/ping?foo=bar")
+        self.assertEqual(resp.status_code, 201)
+        mock_event.assert_not_called()
+
+    @with_config({"insights_config": {"flask": {"include_params": True}}})
+    @patch("honeybadger.contrib.flask.honeybadger.event")
+    def test_insights_event_includes_filtered_params(self, mock_event):
+        resp = self.client.post("/ping", data={"password": "ha!", "id": "abc123"})
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(mock_event.call_count, 1)
+
+        _, payload = mock_event.call_args[0]
+        self.assertEqual(payload["params"], {"id": "abc123"})
+
+    @patch("honeybadger.contrib.flask.honeybadger.set_event_context")
+    def test_request_id_set_from_header(self, mock_set_event_context):
+        resp = self.client.get("/ping", headers={"X-Request-ID": "test-request-123"})
+        self.assertEqual(resp.status_code, 201)
+
+        mock_set_event_context.assert_called_once_with(request_id="test-request-123")
+
+    @patch("honeybadger.contrib.flask.honeybadger.set_event_context")
+    def test_request_id_generated_when_missing(self, mock_set_event_context):
+        resp = self.client.get("/ping")
+        self.assertEqual(resp.status_code, 201)
+
+        request_id = mock_set_event_context.call_args[1]["request_id"]
+        uuid_obj = uuid.UUID(request_id)
+        assert isinstance(uuid_obj, uuid.UUID)

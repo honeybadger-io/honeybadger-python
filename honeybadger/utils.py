@@ -1,4 +1,6 @@
 import json
+import time
+import re
 
 
 class StringReprJSONEncoder(json.JSONEncoder):
@@ -44,7 +46,7 @@ def filter_env_vars(data):
     return filtered_data
 
 
-def filter_dict(data, filter_keys):
+def filter_dict(data, filter_keys, remove_keys=False):
     if type(data) != dict:
         return data
 
@@ -57,10 +59,42 @@ def filter_dict(data, filter_keys):
             data.pop(key)
             continue
 
-        if key in filter_keys:
-            data[key] = "[FILTERED]"
-
         if type(data[key]) == dict:
             data[key] = filter_dict(data[key], filter_keys)
 
+        if key in filter_keys:
+            if remove_keys:
+                data.pop(key)
+            else:
+                data[key] = "[FILTERED]"
+
     return data
+
+
+PREFIX = "HONEYBADGER_"
+
+
+def extract_honeybadger_config(kwargs):
+    return {
+        key[len(PREFIX) :].lower(): value
+        for key, value in kwargs.items()
+        if key.startswith(PREFIX)
+    }
+
+
+def get_duration(start_time):
+    """Get the duration in milliseconds since start_time."""
+    if start_time is None:
+        return None
+
+    return round((time.time() - start_time) * 1000, 4)
+
+
+def sanitize_request_id(request_id):
+    """Sanitize a Request ID by keeping only alphanumeric characters and hyphens."""
+    if not request_id:
+        return None
+
+    sanitized = re.sub(r"[^a-zA-Z0-9-]", "", request_id.strip())[:255]
+
+    return sanitized or None
