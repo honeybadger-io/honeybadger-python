@@ -4,6 +4,7 @@ CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+- Fix: Removes deprecated usage of datetime.utcnow
 
 ## [1.0.1] - 2025-06-09
 - Fix: Always create error dictionary if exception is not provided (#222)
