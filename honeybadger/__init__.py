@@ -18,6 +18,7 @@ __all__ = ["honeybadger", "__version__"]
 honeybadger = Honeybadger()
 honeybadger.wrap_excepthook(sys.excepthook)
 
+
 def _register_signal_handler():
     orig = signal.getsignal(signal.SIGTERM)
 
@@ -29,6 +30,6 @@ def _register_signal_handler():
 
     signal.signal(signal.SIGTERM, _on_term)
 
+
 if threading.main_thread():
     _register_signal_handler()
-
