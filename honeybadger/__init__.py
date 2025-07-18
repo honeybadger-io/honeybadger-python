@@ -9,6 +9,7 @@ Use cases:
 
 import sys
 import signal
+import threading
 from .core import Honeybadger
 from .version import __version__
 
@@ -17,14 +18,17 @@ __all__ = ["honeybadger", "__version__"]
 honeybadger = Honeybadger()
 honeybadger.wrap_excepthook(sys.excepthook)
 
-orig = signal.getsignal(signal.SIGTERM)
+def _register_signal_handler():
+    orig = signal.getsignal(signal.SIGTERM)
 
+    def _on_term(signum, frame):
+        if callable(orig):
+            orig(signum, frame)
+        else:
+            sys.exit(0)
 
-def _on_term(signum, frame):
-    if callable(orig):
-        orig(signum, frame)
-    else:
-        sys.exit(0)
+    signal.signal(signal.SIGTERM, _on_term)
 
+if threading.main_thread():
+    _register_signal_handler()
 
-signal.signal(signal.SIGTERM, _on_term)
