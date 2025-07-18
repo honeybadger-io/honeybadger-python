@@ -31,5 +31,5 @@ def _register_signal_handler():
     signal.signal(signal.SIGTERM, _on_term)
 
 
-if threading.main_thread():
+if threading.current_thread() is threading.main_thread():
     _register_signal_handler()
