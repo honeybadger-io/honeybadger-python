@@ -1,9 +1,9 @@
-from typing import Protocol, Dict, Any, Optional, List
+from typing import Protocol, Any, Optional, List
 from .types import EventsSendResult, Notice, Event
 
 
 class Connection(Protocol):
-    def send_notice(self, config: Any, payload: Notice) -> Optional[str]:
+    def send_notice(self, config: Any, notice: Notice) -> Optional[str]:
         """
         Send an error notice to Honeybadger.
 
