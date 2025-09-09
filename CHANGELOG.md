@@ -5,6 +5,12 @@ adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.3] - 2025-07-21
+- Fix: Register signal handler only in main thread
+
+## [1.0.2] - 2025-07-04
+- Fix: Removes deprecated usage of datetime.utcnow
+
 ## [1.0.1] - 2025-06-09
 - Fix: Always create error dictionary if exception is not provided (#222)
 
