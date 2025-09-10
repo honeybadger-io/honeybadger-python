@@ -107,7 +107,7 @@ def test_finished_task_event(mock_event):
     assert mock_event.call_count == 1
     assert mock_event.call_args[0][0] == "celery.task_finished"
 
-    payload = mock_event.call_args[1]["payload"]
+    payload = mock_event.call_args[1]["data"]
     assert payload["task_id"] == "test_task_id"
     assert payload["task_name"] == "test_task"
     assert payload["state"] == "SUCCESS"
@@ -133,7 +133,7 @@ def test_includes_task_args(mock_event):
     assert mock_event.call_count == 1
     assert mock_event.call_args[0][0] == "celery.task_finished"
 
-    payload = mock_event.call_args[1]["payload"]
+    payload = mock_event.call_args[1]["data"]
 
     assert payload["task_id"] == "test_task_id"
     assert payload["task_name"] == "test_task"
