@@ -154,7 +154,7 @@ class FlaskHoneybadger(object):
             )
 
             self._register_signal_handler(
-                "insights on request end",
+                "insights on request start",
                 request_started,
                 self._handle_request_started,
             )
