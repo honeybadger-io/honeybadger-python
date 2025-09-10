@@ -164,7 +164,7 @@ class CeleryHoneybadger(object):
                     remove_keys=True,
                 )
 
-            honeybadger.event("celery.task_finished", payload=payload)
+            honeybadger.event("celery.task_finished", payload)
 
         honeybadger.reset_context()
 
