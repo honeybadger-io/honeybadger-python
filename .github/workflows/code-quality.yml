@@ -6,7 +6,7 @@ concurrency:
 
 on:
   pull_request:
-    branches: [ master, insights-instrumentation ]
+    branches: [ master ]
     types: [opened, edited, synchronize, reopened]
 
 jobs:
