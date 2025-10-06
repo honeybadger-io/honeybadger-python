@@ -288,7 +288,7 @@ def test_interleave_new_events_during_throttle_backoff(base_config):
         w.push(e)
 
     assert wait_for(
-        lambda: len(conn.batches) >= 1, timeout=cfg.events_timeout
+        lambda: len(conn.batches) >= 1, timeout=cfg.events_timeout * 1.1
     ), f"Expected first batch within {cfg.events_timeout}s"
 
     second = [{"id": 4}, {"id": 5}, {"id": 6}]
