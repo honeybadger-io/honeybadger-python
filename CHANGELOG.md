@@ -4,6 +4,7 @@ CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+- Add Insights automatic instrumentation (#215)
 
 ## [1.0.3] - 2025-07-21
 - Fix: Register signal handler only in main thread
