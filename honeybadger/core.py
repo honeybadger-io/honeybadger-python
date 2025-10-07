@@ -2,10 +2,12 @@ import threading
 from contextlib import contextmanager
 import sys
 import logging
-import copy
-import time
 import datetime
 import atexit
+import uuid
+import hashlib
+
+from typing import Optional, Dict, Any, List
 
 from honeybadger.plugins import default_plugin_manager
 import honeybadger.connection as connection
@@ -13,18 +15,23 @@ import honeybadger.fake_connection as fake_connection
 from .events_worker import EventsWorker
 from .config import Configuration
 from .notice import Notice
+from .context_store import ContextStore
 
 logger = logging.getLogger("honeybadger")
 logger.addHandler(logging.NullHandler())
+
+error_context = ContextStore("honeybadger_error_context")
+event_context = ContextStore("honeybadger_event_context")
 
 
 class Honeybadger(object):
     TS_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
 
     def __init__(self):
+        error_context.clear()
+        event_context.clear()
+
         self.config = Configuration()
-        self.thread_local = threading.local()
-        self.thread_local.context = {}
         self.events_worker = EventsWorker(
             self._connection(), self.config, logger=logging.getLogger("honeybadger")
         )
@@ -47,21 +54,16 @@ class Honeybadger(object):
 
         self._connection().send_notice(self.config, notice)
 
-    def _get_context(self):
-        return getattr(self.thread_local, "context", {})
-
-    def begin_request(self, request):
-        self.thread_local.context = self._get_context()
+    def begin_request(self, _):
+        error_context.clear()
+        event_context.clear()
 
     def wrap_excepthook(self, func):
         self.existing_except_hook = func
         sys.excepthook = self.exception_hook
 
     def exception_hook(self, type, exception, exc_traceback):
-        notice = Notice(
-            exception=exception, thread_local=self.thread_local, config=self.config
-        )
-        self._send_notice(notice)
+        self.notify(exception=exception)
         self.existing_except_hook(type, exception, exc_traceback)
 
     def shutdown(self):
@@ -72,19 +74,26 @@ class Honeybadger(object):
         exception=None,
         error_class=None,
         error_message=None,
-        context={},
+        context: Optional[Dict[str, Any]] = None,
         fingerprint=None,
-        tags=[],
+        tags: Optional[List[str]] = None,
     ):
+        base = error_context.get()
+        tag_ctx = base.pop("_tags", [])
+        merged_ctx = {**base, **(context or {})}
+        merged_tags = list({*tag_ctx, *(tags or [])})
+
+        request_id = self._get_event_context().get("request_id", None)
+
         notice = Notice(
             exception=exception,
             error_class=error_class,
             error_message=error_message,
-            context=context,
+            context=merged_ctx,
             fingerprint=fingerprint,
-            tags=tags,
-            thread_local=self.thread_local,
+            tags=merged_tags,
             config=self.config,
+            request_id=request_id,
         )
         return self._send_notice(notice)
 
@@ -107,13 +116,33 @@ class Honeybadger(object):
                 "The first argument must be either a string or a dictionary"
             )
 
+        if callable(self.config.before_event):
+            try:
+                next_payload = self.config.before_event(payload)
+                if next_payload is False:
+                    return  # Skip sending the event
+                elif next_payload is not payload and next_payload is not None:
+                    payload = next_payload  # Overwrite payload
+                # else: assume in-place mutation; keep payload as-is
+            except Exception as e:
+                logger.error("Error in before_event callback: %s", e)
+
         # Add a timestamp to the payload if not provided
         if "ts" not in payload:
             payload["ts"] = datetime.datetime.now(datetime.timezone.utc)
         if isinstance(payload["ts"], datetime.datetime):
             payload["ts"] = payload["ts"].strftime(self.TS_FORMAT)
 
-        return self.events_worker.push(payload)
+        final_payload = {**self._get_event_context(), **payload}
+
+        # Check sampling on the final merged payload
+        if not self._should_sample_event(final_payload):
+            return
+
+        # Strip internal _hb metadata before sending
+        final_payload.pop("_hb", None)
+
+        return self.events_worker.push(final_payload)
 
     def configure(self, **kwargs):
         self.config.set_config_from_dict(kwargs)
@@ -130,28 +159,58 @@ class Honeybadger(object):
         if self.config.is_aws_lambda_environment:
             default_plugin_manager.register(contrib.AWSLambdaPlugin())
 
-    def set_context(self, ctx=None, **kwargs):
-        # This operation is an update, not a set!
-        if not ctx:
-            ctx = kwargs
-        else:
-            ctx.update(kwargs)
-        self.thread_local.context = self._get_context()
-        self.thread_local.context.update(ctx)
+    def _should_sample_event(self, payload):
+        """
+        Determine if an event should be sampled based on sample rate and payload metadata.
+        Returns True if the event should be sent, False if it should be skipped.
+        """
+        # Get sample rate from payload _hb override or global config
+        hb_metadata = payload.get("_hb", {})
+        sample_rate = hb_metadata.get("sample_rate", self.config.events_sample_rate)
+
+        if sample_rate >= 100:
+            return True
+
+        if sample_rate <= 0:
+            return False
+
+        sampling_key = payload.get("request_id")
+        if not sampling_key:
+            sampling_key = str(uuid.uuid4())
+        hash_value = int(hashlib.md5(sampling_key.encode()).hexdigest(), 16)
+        return (hash_value % 100) < sample_rate
+
+    # Error context
+    #
+    def _get_context(self):
+        return error_context.get()
+
+    def set_context(self, ctx: Optional[Dict[str, Any]] = None, **kwargs):
+        error_context.update(ctx, **kwargs)
 
     def reset_context(self):
-        self.thread_local.context = {}
+        error_context.clear()
 
     @contextmanager
-    def context(self, **kwargs):
-        original_context = copy.copy(self._get_context())
-        self.set_context(**kwargs)
-        try:
+    def context(self, ctx: Optional[Dict[str, Any]] = None, **kwargs):
+        with error_context.override(ctx, **kwargs):
             yield
-        except:
-            raise
-        else:
-            self.thread_local.context = original_context
+
+    # Event context
+    #
+    def _get_event_context(self):
+        return event_context.get()
+
+    def set_event_context(self, ctx: Optional[Dict[str, Any]] = None, **kwargs):
+        event_context.update(ctx, **kwargs)
+
+    def reset_event_context(self):
+        event_context.clear()
+
+    @contextmanager
+    def event_context(self, ctx: Optional[Dict[str, Any]] = None, **kwargs):
+        with event_context.override(ctx, **kwargs):
+            yield
 
     def _connection(self):
         if self.config.is_dev() and not self.config.force_report_data:

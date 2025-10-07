@@ -85,34 +85,29 @@ def test_notice_with_tags():
     assert "tag2" in payload["error"]["tags"]
 
 
-def test_notify_with_context_tags():
+def test_notice_with_multiple_tags():
     config = Configuration()
-    thread_local = threading.local()
-    thread_local.context = {"_tags": "tag1, tag2"}
 
     notice = Notice(
         error_class="TestError",
         error_message="Test message",
-        thread_local=thread_local,
+        tags=["tag1, tag2", "tag3"],
         config=config,
     )
     payload = notice.payload
     assert "tag1" in payload["error"]["tags"]
     assert "tag2" in payload["error"]["tags"]
+    assert "tag3" in payload["error"]["tags"]
 
 
-def test_notify_with_context_merging_tags():
+def test_notice_with_request_id():
     config = Configuration()
-    thread_local = threading.local()
-    thread_local.context = {"_tags": "tag1"}
 
     notice = Notice(
         error_class="TestError",
         error_message="Test message",
-        thread_local=thread_local,
-        tags="tag2",
+        request_id="12345",
         config=config,
     )
     payload = notice.payload
-    assert "tag1" in payload["error"]["tags"]
-    assert "tag2" in payload["error"]["tags"]
+    assert payload["correlation_context"]["request_id"] == "12345"

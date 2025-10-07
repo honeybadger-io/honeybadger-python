@@ -277,6 +277,132 @@ That's it! For additional configuration options, keep reading.
 
 **Note:** By default, honeybadger reports errors in separate threads. For platforms that disallows threading (such as serving a flask/django app with uwsgi and disabling threading), Honeybadger will fail to report errors. You can either enable threading if you have the option, or set `force_sync` config option to `True`. This causes Honeybadger to report errors in a single thread.
 
+## Insights Automatic Instrumentation
+
+Honeybadger Insights allows you to automatically track various events in your
+application. To enable Insights automatic instrumentation, add the following to
+your configuration:
+
+```python
+honeybadger.configure(insights_enabled=True)
+```
+
+### Supported Libraries
+
+After integration with our middleware or extensions, Honeybadger will
+automatically instrument the following libraries:
+
+- Django requests & database queries
+- Flask requests & database queries
+- ASGI requests
+- Celery tasks
+
+### Configuration
+
+You can configure the instrumentation for specific libraries / components by
+passing a dictionary to a specialized `insights_config` parameter.
+
+By default, all keyword dict params are run through our `params_filters`.
+
+The following instrumentation configs are available:
+
+#### Django
+
+```python
+    honeybadger.configure(
+        insights_config={
+            "django": {
+                # Disable instrumentation for Django, defaults to False
+                "disabled": True,
+                # include GET/POST params in events, defaults to False
+                "include_params": True,
+            }
+        }
+    )
+```
+
+#### Flask
+
+```python
+    honeybadger.configure(
+        insights_config={
+            "flask": {
+                # Disable instrumentation for Flask, defaults to False
+                "disabled": True,
+                # Include GET/POST params in events, defaults to False
+                "include_params": True,
+            }
+        }
+    )
+```
+
+#### ASGI
+
+```python
+    honeybadger.configure(
+        insights_config={
+            "asgi": {
+                # Disable instrumentation for ASGI, defaults to False
+                "disabled": True,
+                # Include query params in events, defaults to False
+                "include_params": True,
+            }
+        }
+    )
+```
+
+#### Celery
+
+```python
+    honeybadger.configure(
+        insights_config={
+            "celery": {
+                # Disable instrumentation for Celery, defaults to False
+                "disabled": True,
+                # Include task args/kwargs, defaults to False
+                "include_args": True,
+                # List of task names or regexes to exclude, defaults to []
+                "exclude_tasks": [
+                    "tasks.cleanup",
+                    re.compile("^internal_"),
+                ],
+            }
+        }
+    )
+```
+
+#### DB
+
+To configure database instrumentation, you can pass a dictionary to the
+"db" insights config. This will affect all supported libraries that use capture
+database events.
+
+```python
+    honeybadger.configure(
+        insights_config={
+            "db": {
+                # Disable instrumentation for DB, defaults to False
+                "disabled": True,
+                # Include SQL params in events, defaults to False
+                "include_params": True,
+
+                # List of task names or regexes to exclude, defaults to
+                # `honeybadger.config.default_excluded_queries()`
+                "exclude_queries": [
+                    "django_admin_log",                 # Matches any query containing this string
+                    re.compile(r".*auth_permission.*"), # Regex pattern
+                ],
+
+                # To add to the default excluded queries, use the `honeybadger.config.default_excluded_queries()` method
+                "exclude_queries": honeybadger.config.default_excluded_queries() + [
+                    re.compile(r".*django_admin_log.*"),
+                    re.compile(r".*auth_permission.*"),
+                ],
+            }
+        }
+    )
+```
+
 ## Logging
 
 By default, Honeybadger uses the `logging.NullHandler` for logging so it doesn't make any assumptions about your logging setup. In Django, add a `honeybadger` section to your `LOGGING` config to enable Honeybadger logging. For example:
@@ -371,15 +497,17 @@ The following options are available to you:
 | endpoint                 | `str`      | `"https://api.honeybadger.io"`                         | `"https://honeybadger.example.com/"`  | `HONEYBADGER_ENDPOINT`                |
 | params_filters           | `list`     | `['password', 'password_confirmation', 'credit_card']` | `['super', 'secret', 'keys']`         | `HONEYBADGER_PARAMS_FILTERS`          |
 | force_report_data        | `bool`     | `False`                                                | `True`                                | `HONEYBADGER_FORCE_REPORT_DATA`       |
+| before_notify            | `callable` | `lambda notice: notice`                                | `custom_before_notify_function`       | n/a                                   |
 | excluded_exceptions      | `list`     | `[]`                                                   | `['Http404', 'MyCustomIgnoredError']` | `HONEYBADGER_EXCLUDED_EXCEPTIONS`     |
 | force_sync               | `bool`     | `False`                                                | `True`                                | `HONEYBADGER_FORCE_SYNC`              |
 | report_local_variables   | `bool`     | `False`                                                | `True`                                | `HONEYBADGER_REPORT_LOCAL_VARIABLES`  |
+| insights_enabled         | `bool`     | `False`                                                | `True`                                | `HONEYBADGER_INSIGHTS_ENABLED`        |
+| before_event             | `callable` | `lambda notice: None`                                  | `custom_before_notify_function`       | n/a                                   |
 | events_batch_size        | `int`      | `1000`                                                 | `50`                                  | `HONEYBADGER_EVENTS_BATCH_SIZE`       |
 | events_max_queue_size    | `int`      | `10000`                                                | `5000`                                | `HONEYBADGER_EVENTS_MAX_QUEUE_SIZE`   |
 | events_timeout           | `float`    | `5.0`                                                  | `1.0`                                 | `HONEYBADGER_EVENTS_TIMEOUT`          |
 | events_max_batch_retries | `int`      | `3`                                                    | `5`                                   | `HONEYBADGER_EVENTS_MAX_BATCH_RETRIES`|
 | events_throttle_wait     | `float`    | `60.0`                                                 | `1200.0`                              | `HONEYBADGER_EVENTS_THROTTLE_WAIT`    |
-| before_notify            | `callable` | `lambda notice: notice`                                | `custom_before_notify_function`       | n/a                                   |
 
 [^1]: Honeybadger will try to infer the correct environment when possible. For example, in the case of the Django integration, if Django settings are set to `DEBUG = True`, the environment will default to `development`.
 

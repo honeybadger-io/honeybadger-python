@@ -158,6 +158,7 @@ def create_payload(
     config=None,
     context=None,
     fingerprint=None,
+    correlation_context=None,
     tags=None,
 ):
     # if using local_variables get them
@@ -187,5 +188,8 @@ def create_payload(
         "server": server_payload(config),
         "request": {"context": context, "local_variables": local_variables},
     }
+
+    if correlation_context:
+        payload["correlation_context"] = correlation_context
 
     return default_plugin_manager.generate_payload(payload, config, context)

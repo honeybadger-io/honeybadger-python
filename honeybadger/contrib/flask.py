@@ -1,13 +1,25 @@
 from __future__ import absolute_import
+from contextvars import ContextVar
 
 import logging
+import time
+import uuid
 
 from honeybadger import honeybadger
 from honeybadger.plugins import Plugin, default_plugin_manager
-from honeybadger.utils import filter_dict, filter_env_vars
+from honeybadger.utils import (
+    filter_dict,
+    filter_env_vars,
+    get_duration,
+    extract_honeybadger_config,
+    sanitize_request_id,
+)
+from honeybadger.contrib.db import DBHoneybadger
 from six import iteritems
 
 logger = logging.getLogger(__name__)
+
+_request_info: ContextVar[dict] = ContextVar("_request_info")
 
 
 class FlaskPlugin(Plugin):
@@ -80,8 +92,6 @@ class FlaskHoneybadger(object):
     Flask extension for Honeybadger. Initializes Honeybadger and adds a request information to payload.
     """
 
-    CONFIG_PREFIX = "HONEYBADGER_"
-
     def __init__(
         self, app=None, report_exceptions=False, reset_context_after_request=False
     ):
@@ -96,6 +106,7 @@ class FlaskHoneybadger(object):
         self.report_exceptions = False
         self.reset_context_after_request = False
         default_plugin_manager.register(FlaskPlugin())
+
         if app is not None:
             self.init_app(
                 app,
@@ -111,7 +122,12 @@ class FlaskHoneybadger(object):
          (i.e. by calling abort) or not.
         :param bool reset_context_after_request: whether to reset honeybadger context after each request.
         """
-        from flask import request_tearing_down, got_request_exception
+        from flask import (
+            request_tearing_down,
+            got_request_exception,
+            request_finished,
+            request_started,
+        )
 
         self.app = app
 
@@ -127,6 +143,20 @@ class FlaskHoneybadger(object):
                 "auto-reporting exceptions",
                 got_request_exception,
                 self._handle_exception,
+            )
+
+        if honeybadger.config.insights_enabled:
+            self._install_sqlalchemy_instrumentation()
+            self._register_signal_handler(
+                "insights on request end",
+                request_finished,
+                self._handle_request_finished,
+            )
+
+            self._register_signal_handler(
+                "insights on request start",
+                request_started,
+                self._handle_request_started,
             )
 
         if self.reset_context_after_request:
@@ -166,13 +196,71 @@ class FlaskHoneybadger(object):
         if config.get("DEBUG", False):
             honeybadger.configure(environment="development")
 
-        honeybadger_config = {}
-        for key, value in iteritems(config):
-            if key.startswith(self.CONFIG_PREFIX):
-                honeybadger_config[key[len(self.CONFIG_PREFIX) :].lower()] = value
-
+        honeybadger_config = extract_honeybadger_config(config)
         honeybadger.configure(**honeybadger_config)
         honeybadger.config.set_12factor_config()  # environment should override Flask settings
+
+    def _handle_request_started(self, sender, *args, **kwargs):
+        from flask import request
+
+        request_id = sanitize_request_id(request.headers.get("X-Request-ID"))
+        if not request_id:
+            request_id = str(uuid.uuid4())
+
+        honeybadger.set_event_context(request_id=request_id)
+
+        _request_info.set(
+            {
+                "start_time": time.time(),
+                "request": request,
+            }
+        )
+
+    def _handle_request_finished(self, sender, *args, **kwargs):
+        if honeybadger.config.insights_config.flask.disabled:
+            return
+
+        info = _request_info.get({})
+        request = info.get("request")
+        start = info.get("start_time")
+        response = kwargs.get("response")
+
+        payload = {
+            "path": request.path,
+            "method": request.method,
+            "status": response.status_code,
+            "view": request.endpoint,
+            "blueprint": request.blueprint,
+            "duration": get_duration(start),
+        }
+
+        if honeybadger.config.insights_config.flask.include_params:
+            params = {}
+
+            # Add query params (from URL)
+            for key in request.args:
+                values = request.args.getlist(key)
+                params[key] = values[0] if len(values) == 1 else values
+
+            # Add form params (from POST body)
+            for key in request.form:
+                values = request.form.getlist(key)
+                # Combine with existing values if key present
+                if key in params:
+                    existing = (
+                        params[key] if isinstance(params[key], list) else [params[key]]
+                    )
+                    params[key] = existing + values
+                else:
+                    params[key] = values[0] if len(values) == 1 else values
+
+            payload["params"] = filter_dict(
+                params, honeybadger.config.params_filters, remove_keys=True
+            )
+
+        honeybadger.event("flask.request", payload)
+
+        _request_info.set({})
 
     def _reset_context(self, *args, **kwargs):
         """
@@ -189,3 +277,23 @@ class FlaskHoneybadger(object):
         honeybadger.notify(exception)
         if self.reset_context_after_request:
             self._reset_context()
+
+    def _install_sqlalchemy_instrumentation(self):
+        """
+        Attach SQLAlchemy Engine events: before/after_cursor_execute => honeybadger.event
+        """
+        try:
+            import sqlalchemy  # type: ignore
+        except ImportError:
+            return
+        # immediate patch
+        from sqlalchemy import event  # type: ignore
+        from sqlalchemy.engine import Engine  # type: ignore
+
+        @event.listens_for(Engine, "before_cursor_execute", propagate=True)
+        def _before(conn, cursor, stmt, params, ctx, executemany):
+            ctx._hb_start = time.time()
+
+        @event.listens_for(Engine, "after_cursor_execute", propagate=True)
+        def _after(conn, cursor, stmt, params, ctx, executemany):
+            DBHoneybadger.execute(stmt, ctx._hb_start, params)

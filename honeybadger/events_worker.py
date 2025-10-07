@@ -1,3 +1,4 @@
+import os
 import time
 import threading
 import logging
@@ -28,7 +29,7 @@ class EventsWorker:
 
         self.log = logger or logging.getLogger(__name__)
         self._lock = threading.RLock()
-        self._cond = threading.Condition(self._lock)
+        self._batch_ready_event = threading.Event()
 
         self._queue: Deque[Event] = deque()
         self._batches: Deque[Tuple[List[Event], int]] = deque()
@@ -41,29 +42,48 @@ class EventsWorker:
 
         self._thread = threading.Thread(
             target=self._run,
-            name="honeybadger-events-worker",
+            name=f"honeybadger-events-worker-{os.getpid()}",
             daemon=True,
         )
         self._thread.start()
         self.log.debug("Events worker started")
 
-    def push(self, event: Event) -> bool:
-        with self._cond:
-            if self._all_events_queued_len() >= self.config.events_max_queue_size:
-                self._drop()
-                return False
+    def restart(self):
+        """Restart the batch worker thread (useful after process forking)"""
+        if hasattr(self, "_thread") and self._thread and self._thread.is_alive():
+            self.shutdown()
 
-            self._queue.append(event)
-            if len(self._queue) >= self.config.events_batch_size:
-                self._cond.notify()
+        # Reset state
+        self._stop = False
+
+        self._thread = threading.Thread(
+            target=self._run,
+            name=f"honeybadger-events-worker-{os.getpid()}",
+            daemon=True,
+        )
+        self._thread.start()
+
+        return self._thread.is_alive()
+
+    def push(self, event: Event) -> bool:
+        # Small race condition is acceptable - may slightly exceed max size briefly
+        current_size = self._all_events_queued_len()
+        if current_size >= self.config.events_max_queue_size:
+            self._drop()
+            return False
+
+        self._queue.append(event)
+
+        # Signal worker thread if batch size reached
+        if len(self._queue) >= self.config.events_batch_size:
+            self._batch_ready_event.set()
 
         return True
 
     def shutdown(self) -> None:
         self.log.debug("Shutting down events worker")
-        with self._cond:
-            self._stop = True
-            self._cond.notify()
+        self._stop = True
+        self._batch_ready_event.set()  # Wake up the worker thread
 
         if self._thread.is_alive():
             timeout = (
@@ -91,14 +111,12 @@ class EventsWorker:
         Main loop: wait until stop or enough events to batch, then flush.
         """
         while True:
-            with self._cond:
-                # Wake on stop flag, full batch, or after compute_timeout
-                self._cond.wait_for(
-                    lambda: self._stop
-                    or len(self._queue) >= self.config.events_batch_size,
-                    timeout=self._compute_timeout(),
-                )
-                # Exit when shutdown requested and all work is done
+            # Wait for batch ready signal or timeout
+            self._batch_ready_event.wait(timeout=self._compute_timeout())
+            self._batch_ready_event.clear()
+
+            # Check if we should exit (need consistent view of state)
+            with self._lock:
                 if self._stop and not self._queue and not self._batches:
                     break
 
@@ -112,9 +130,15 @@ class EventsWorker:
         """
         with self._lock:
             # If there are new queued events, package them as a fresh batch
-            if self._queue:
-                batch = list(self._queue)
-                self._queue.clear()
+            # Use popleft() which is atomic/thread-safe (unlike list() or clear())
+            batch = []
+            while True:
+                try:
+                    batch.append(self._queue.popleft())
+                except IndexError:
+                    break
+
+            if batch:
                 self._batches.append((batch, 0))
                 self._start_time = time.monotonic()
 

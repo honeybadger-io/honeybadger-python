@@ -1,6 +1,7 @@
 import unittest
 import json
 import importlib
+import uuid
 from mock import patch
 from mock import Mock
 import sys
@@ -244,3 +245,123 @@ class DjangoMiddlewareIntegrationTestCase(SimpleTestCase):
             except:
                 pass
             self.assertTrue(request_mock.called)
+
+
+class FakeCursorWrapper:
+    def __init__(self, *a, **kw):
+        pass
+
+    def execute(self, sql, params=None):
+        return f"original execute: {sql}"
+
+
+@override_settings(HONEYBADGER={"INSIGHTS_ENABLED": True, "INSIGHTS_CONFIG": {}})
+class DjangoMiddlewareEventTestCase(SimpleTestCase):
+    def setUp(self):
+        self.rf = RequestFactory()
+        # point at your URLconf so resolver_match works
+        self.url = re_path(r"plain_view/?$", plain_view, name="plain_view")
+
+    def tearDown(self):
+        clear_request()
+
+    @patch("honeybadger.contrib.django.honeybadger.event")
+    def test_event_sent_on_successful_request(self, mock_event):
+        # arrange
+        request = self.rf.get("/plain_view/")
+        request.resolver_match = self.url.resolve("plain_view")
+        # force a known status code
+        response = Mock(status_code=418)
+        mw = DjangoHoneybadgerMiddleware(lambda req: response)
+
+        # act
+        mw(request)
+
+        # assert
+        mock_event.assert_called_once()
+        event_name, data = mock_event.call_args[0]
+        self.assertEqual(event_name, "django.request")
+        self.assertEqual(data["method"], "GET")
+        self.assertEqual(data["status"], 418)
+        self.assertEqual(data["path"], "/plain_view/")
+        self.assertEqual(data["view"], "plain_view")
+        # duration should be a float > 0
+        self.assertIsInstance(data["duration"], float)
+        self.assertGreater(data["duration"], 0)
+
+    @patch("honeybadger.contrib.django.honeybadger.event")
+    def test_no_request_left_in_thread_locals(self, mock_event):
+        # ensure that clear_request() always runs
+        request = self.rf.get("/plain_view/")
+        request.resolver_match = self.url.resolve("plain_view")
+        mw = DjangoHoneybadgerMiddleware(lambda req: Mock())
+        mw(request)
+        self.assertIsNone(current_request())
+
+    @patch("django.db.backends.utils.CursorWrapper", new=FakeCursorWrapper)
+    @patch("honeybadger.contrib.django.honeybadger.event")
+    def test_patch_cursor_and_execute_sends_event(self, mock_event):
+        mw = DjangoHoneybadgerMiddleware(lambda req: None)
+        cur = FakeCursorWrapper()
+        res = cur.execute("SELECT something")
+        assert res == "original execute: SELECT something"
+        mock_event.assert_called_once()
+
+    @override_settings(
+        HONEYBADGER={
+            "INSIGHTS_ENABLED": True,
+            "INSIGHTS_CONFIG": {"django": {"disabled": True}},
+        }
+    )
+    @patch("honeybadger.contrib.django.honeybadger.event")
+    def test_event_disabled_with_disabled_config(self, mock_event):
+        request = self.rf.get("/plain_view/")
+        request.resolver_match = self.url.resolve("plain_view")
+        mw = DjangoHoneybadgerMiddleware(lambda req: Mock())
+        mw(request)
+        mock_event.assert_not_called()
+
+    @override_settings(
+        HONEYBADGER={
+            "INSIGHTS_ENABLED": True,
+            "INSIGHTS_CONFIG": {"django": {"include_params": True}},
+        }
+    )
+    @patch("honeybadger.contrib.django.honeybadger.event")
+    def test_event_includes_filtered_params(self, mock_event):
+        request = self.rf.get("/plain_view/", {"password": "hide", "b": 2})
+        request.resolver_match = self.url.resolve("plain_view")
+        mw = DjangoHoneybadgerMiddleware(lambda req: Mock())
+        mw(request)
+        mock_event.assert_called_once()
+        event_name, data = mock_event.call_args[0]
+        self.assertEqual(data["params"], {"b": "2"})
+
+    @patch("honeybadger.contrib.django.honeybadger.set_event_context")
+    def test_existing_request_id_header(self, mock_set_event_context):
+        req_id = "abc-123"
+        request = self.rf.get("/foo", headers={"x-request-id": req_id})
+
+        def get_response(req):
+            return object()
+
+        mw = DjangoHoneybadgerMiddleware(get_response)
+        mw(request)
+
+        # Assert request_id propagated
+        mock_set_event_context.assert_called_once_with(request_id=req_id)
+
+    @patch("honeybadger.contrib.django.honeybadger.set_event_context")
+    def test_missing_request_id_header(self, mock_set_event_context):
+        request = self.rf.get("/foo")
+
+        def get_response(req):
+            return object()
+
+        mw = DjangoHoneybadgerMiddleware(get_response)
+        mw(request)
+
+        # Should be a UUID
+        request_id = mock_set_event_context.call_args[1]["request_id"]
+        uuid_obj = uuid.UUID(request_id)
+        assert isinstance(uuid_obj, uuid.UUID)
