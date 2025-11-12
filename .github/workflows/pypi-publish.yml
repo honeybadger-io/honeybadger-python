@@ -17,9 +17,12 @@ permissions:
 # Therefore, make sure that the tags are created in the repository before running the release workflow: `autorelease: pending`, `autorelease: tagged`
 
 jobs:
-  publish:
-    runs-on: ubuntu-22.04
+  test:
+    uses: honeybadger-io/honeybadger-python/.github/workflows/python.yml@master
 
+  publish:
+    needs: [ test ]
+    runs-on: ubuntu-22.04
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
