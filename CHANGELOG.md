@@ -3,9 +3,7 @@ All notable changes to this project will be documented in this file. See [Keep a
 CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
-## [Unreleased]
-
-## [1.1] - 2025-10-07
+## [1.1.0] - 2025-10-07
 - Add Insights automatic instrumentation (#215)
 
 ## [1.0.3] - 2025-07-21

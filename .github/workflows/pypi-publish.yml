@@ -2,60 +2,52 @@ name: Publish new version on PyPi
 
 on:
   workflow_dispatch:
-    inputs:
-      version:
-        type: string
-        description: Set new version!
-        required: true
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  repository-projects: read # this is required by release-please-action to set the auto-release tags
+
+# Note for release-please-action:
+# The action will set the auto-release tags for the release PR. If these tags do not already exist, the action will fail to create them.
+# Therefore, make sure that the tags are created in the repository before running the release workflow: `autorelease: pending`, `autorelease: tagged`
 
 jobs:
   publish:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      - uses: googleapis/release-please-action@v4
+        id: release
         with:
-          token: ${{ secrets.PYPI_PUBLISH_PAT }}
-          fetch-depth: 0
-          ref: master
+          token: ${{ secrets.GITHUB_TOKEN }}
+          release-type: python
 
-      - name: Git Config
-        run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
-
-      - name: Set package version in version.py
-        run: |
-          echo "__version__ = \"${{ inputs.version }}\"" > honeybadger/version.py
-          cat honeybadger/version.py
-
-      - name: Update changelog
-        run: |
-          printf -v date '%(%Y-%m-%d)T\n' -1
-          sed -i "6 a ## [${{ inputs.version }}] - $date" CHANGELOG.md
-          sed -i '/## \[Unreleased\]/{G;}' CHANGELOG.md
-          cat CHANGELOG.md
+      # The logic below handles Pypi publishing.
+      - name: Checkout
+        uses: actions/checkout@v5
+        if: ${{ steps.release.outputs.release_created }}
 
       - name: Setup python
+        if: ${{ steps.release.outputs.release_created }}
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
       - name: Build for python 3
+        if: ${{ steps.release.outputs.release_created }}
         run: |
           pip install --upgrade twine wheel
           python setup.py bdist_wheel
           ls dist
 
       - name: Upload
+        if: ${{ steps.release.outputs.release_created }}
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: twine upload dist/*
-
-      - name: Push version on git
-        run: |
-          git commit -am "Release ${{ inputs.version }}"
-          git tag v${{ inputs.version }}
-          git push origin master --tags
