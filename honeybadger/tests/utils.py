@@ -23,7 +23,7 @@ def mock_urlopen(func, status=201):
     ) as request_mock:
         yield request_mock
         mock_called_event.wait(0.5)
-        ((request_object,), mock_kwargs) = request_mock.call_args
+        (request_object,), mock_kwargs = request_mock.call_args
         func(request_object)
 
 

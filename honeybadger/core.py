@@ -46,13 +46,13 @@ class Honeybadger(object):
 
         if not isinstance(notice, Notice):
             logger.debug("Notice was filtered out by before_notify callback")
-            return
+            return None
 
         if notice.excluded_exception():
             logger.debug("Notice was excluded by exception filter")
-            return
+            return None
 
-        self._connection().send_notice(self.config, notice)
+        return self._connection().send_notice(self.config, notice)
 
     def begin_request(self, _):
         error_context.clear()

@@ -591,3 +591,56 @@ def test_notify_with_error_message_only():
         hb.configure(api_key="aaa", force_report_data=True)
         # This should fail according to breaking change, but currently creates malformed payload
         hb.notify(error_message="Some error message", context={"foo": "bar"})
+
+
+def test_notify_returns_notice_id():
+    """Test that notify() returns a notice_id (UUID) when sending succeeds"""
+    hb = Honeybadger()
+    hb.configure(api_key="aaa", environment="production")
+
+    with patch(
+        "honeybadger.connection.send_notice",
+        return_value="test-notice-uuid-123",
+    ) as mock_send:
+        result = hb.notify(
+            error_class="Exception",
+            error_message="Test message.",
+        )
+
+        assert mock_send.call_count == 1
+        assert result == "test-notice-uuid-123"
+
+
+def test_notify_returns_none_when_filtered_by_before_notify():
+    """Test that notify() returns None when before_notify filters out the notice"""
+
+    def before_notify(notice):
+        return None  # Filter out the notice
+
+    hb = Honeybadger()
+    hb.configure(api_key="aaa", environment="production", before_notify=before_notify)
+
+    with patch("honeybadger.connection.send_notice") as mock_send:
+        result = hb.notify(
+            error_class="Exception",
+            error_message="Test message.",
+        )
+
+        assert mock_send.call_count == 0
+        assert result is None
+
+
+def test_notify_returns_none_when_exception_excluded():
+    """Test that notify() returns None when the exception is excluded"""
+    hb = Honeybadger()
+    hb.configure(
+        api_key="aaa",
+        environment="production",
+        excluded_exceptions=["ValueError"],
+    )
+
+    with patch("honeybadger.connection.send_notice") as mock_send:
+        result = hb.notify(ValueError("excluded error"))
+
+        assert mock_send.call_count == 0
+        assert result is None
