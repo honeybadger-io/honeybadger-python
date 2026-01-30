@@ -52,7 +52,7 @@ class Honeybadger(object):
             logger.debug("Notice was excluded by exception filter")
             return
 
-        self._connection().send_notice(self.config, notice)
+        return self._connection().send_notice(self.config, notice)
 
     def begin_request(self, _):
         error_context.clear()
