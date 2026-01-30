@@ -9,7 +9,6 @@ from six import b
 from .utils import StringReprJSONEncoder
 from .types import EventsSendResult, EventsSendStatus
 
-
 logger = logging.getLogger(__name__)
 
 

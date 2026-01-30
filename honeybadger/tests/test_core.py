@@ -613,6 +613,7 @@ def test_notify_returns_notice_id():
 
 def test_notify_returns_none_when_filtered_by_before_notify():
     """Test that notify() returns None when before_notify filters out the notice"""
+
     def before_notify(notice):
         return None  # Filter out the notice
 
