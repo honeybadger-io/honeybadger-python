@@ -3,6 +3,13 @@ All notable changes to this project will be documented in this file. See [Keep a
 CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
+## [1.1.1](https://github.com/honeybadger-io/honeybadger-python/compare/v1.1.0...v1.1.1) (2026-01-30)
+
+
+### Bug Fixes
+
+* return notice id from notify ([#232](https://github.com/honeybadger-io/honeybadger-python/issues/232)) ([a74ed0a](https://github.com/honeybadger-io/honeybadger-python/commit/a74ed0aa32e8878735292761dd348b0a963f48e7)), closes [#231](https://github.com/honeybadger-io/honeybadger-python/issues/231)
+
 ## [1.1.0] - 2025-10-07
 - Add Insights automatic instrumentation (#215)
 
