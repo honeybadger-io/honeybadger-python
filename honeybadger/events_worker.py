@@ -204,4 +204,5 @@ class EventsWorker:
             self._last_drop_log = now
 
     def _all_events_queued_len(self) -> int:
-        return len(self._queue) + sum(len(b) for b, _ in self._batches)
+        with self._lock:
+            return len(self._queue) + sum(len(b) for b, _ in self._batches)
