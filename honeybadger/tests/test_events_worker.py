@@ -46,8 +46,8 @@ def worker(base_config):
 
 
 def wait_for(predicate, timeout):
-    end = time.time() + timeout
-    while time.time() < end:
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
         if predicate():
             return True
         time.sleep(0.005)

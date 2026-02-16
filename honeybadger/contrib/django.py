@@ -142,7 +142,7 @@ class DjangoHoneybadgerMiddleware(object):
 
     def __call__(self, request):
         set_request(request)
-        start_time = time.time()
+        start_time = time.monotonic()
         honeybadger.begin_request(request)
         self._set_request_id(request)
         response = self.get_response(request)

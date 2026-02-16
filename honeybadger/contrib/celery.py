@@ -118,7 +118,7 @@ class CeleryHoneybadger(object):
                 headers["honeybadger_event_context"] = current_context
 
     def _on_task_prerun(self, task_id=None, task=None, *args, **kwargs):
-        self._task_starts[task_id] = time.time()
+        self._task_starts[task_id] = time.monotonic()
 
         if task:
             context = getattr(task.request, "honeybadger_event_context", None)

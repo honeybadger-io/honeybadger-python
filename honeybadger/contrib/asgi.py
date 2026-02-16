@@ -121,7 +121,7 @@ class ASGIHoneybadger(plugins.Plugin):
     async def _run_request(self, scope, receive, send, app_callable):
         # TODO: Should we check recursive middleware stacks?
         # See: https://github.com/getsentry/sentry-python/blob/master/sentry_sdk/integrations/asgi.py#L112
-        start = time.time()
+        start = time.monotonic()
         status = None
 
         async def send_wrapper(message):
