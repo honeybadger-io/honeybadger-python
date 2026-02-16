@@ -16,31 +16,41 @@ jobs:
     strategy:
       max-parallel: 4
       matrix:
-        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13', '3.14']
         env:
-          - DJANGO_VERSION=4.2.20
-          - DJANGO_VERSION=5.0.14
+          - DJANGO_VERSION=4.2.28
           - DJANGO_VERSION=5.1.8
-          - DJANGO_VERSION=5.2
+          - DJANGO_VERSION=5.2.11
+          - DJANGO_VERSION=6.0.2
           - FLASK_VERSION=1.1.4
           - FLASK_VERSION=2.3.3
           - FLASK_VERSION=3.0.3
-          - FLASK_VERSION=3.1.0
+          - FLASK_VERSION=3.1.2
         exclude:
           - python-version: '3.8'
-            env: DJANGO_VERSION=5.0.14
-          - python-version: '3.8'
             env: DJANGO_VERSION=5.1.8
           - python-version: '3.8'
-            env: DJANGO_VERSION=5.2
-          - python-version: '3.9'
-            env: DJANGO_VERSION=5.0.14
+            env: DJANGO_VERSION=5.2.11
+          - python-version: '3.8'
+            env: DJANGO_VERSION=6.0.2
           - python-version: '3.9'
             env: DJANGO_VERSION=5.1.8
           - python-version: '3.9'
-            env: DJANGO_VERSION=5.2
+            env: DJANGO_VERSION=5.2.11
+          - python-version: '3.9'
+            env: DJANGO_VERSION=6.0.2
           - python-version: '3.8'
-            env: FLASK_VERSION=3.1.0
+            env: FLASK_VERSION=3.1.2
+          - python-version: '3.13'
+            env: DJANGO_VERSION=4.2.28
+          - python-version: '3.13'
+            env: FLASK_VERSION=1.1.4
+          - python-version: '3.14'
+            env: DJANGO_VERSION=4.2.28
+          - python-version: '3.14'
+            env: DJANGO_VERSION=5.1.8
+          - python-version: '3.14'
+            env: FLASK_VERSION=1.1.4
 
     steps:
 
