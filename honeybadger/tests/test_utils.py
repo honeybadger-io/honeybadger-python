@@ -1,7 +1,12 @@
 import time
 from unittest.mock import patch
 
-from honeybadger.utils import filter_dict, filter_env_vars, get_duration, sanitize_request_id
+from honeybadger.utils import (
+    filter_dict,
+    filter_env_vars,
+    get_duration,
+    sanitize_request_id,
+)
 
 
 def test_filter_dict():
