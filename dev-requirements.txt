@@ -1,6 +1,5 @@
 aiounittest
 async-asgi-testclient
-black==26.1.0
 blinker
 celery
 django
@@ -12,7 +11,6 @@ jinja2
 markupsafe
 mock
 psutil
-pylint==4.0.4
 pytest
 pytest-cov
 pytest-asyncio
