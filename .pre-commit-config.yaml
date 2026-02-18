@@ -1,0 +1,17 @@
+repos:
+  - repo: https://github.com/psf/black
+    rev: "26.1.0"
+    hooks:
+      - id: black
+        files: ^honeybadger/
+        language_version: python3
+
+  - repo: local
+    hooks:
+      - id: pylint-errors
+        name: pylint (errors only)
+        entry: pylint -E --disable=import-error
+        language: python
+        types: [python]
+        files: ^honeybadger/
+        additional_dependencies: ["pylint==4.0.4"]
