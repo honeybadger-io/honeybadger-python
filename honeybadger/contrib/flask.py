@@ -211,7 +211,7 @@ class FlaskHoneybadger(object):
 
         _request_info.set(
             {
-                "start_time": time.time(),
+                "start_time": time.monotonic(),
                 "request": request,
             }
         )
@@ -292,7 +292,7 @@ class FlaskHoneybadger(object):
 
         @event.listens_for(Engine, "before_cursor_execute", propagate=True)
         def _before(conn, cursor, stmt, params, ctx, executemany):
-            ctx._hb_start = time.time()
+            ctx._hb_start = time.monotonic()
 
         @event.listens_for(Engine, "after_cursor_execute", propagate=True)
         def _after(conn, cursor, stmt, params, ctx, executemany):

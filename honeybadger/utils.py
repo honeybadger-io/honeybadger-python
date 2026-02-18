@@ -87,7 +87,7 @@ def get_duration(start_time):
     if start_time is None:
         return None
 
-    return round((time.time() - start_time) * 1000, 4)
+    return round((time.monotonic() - start_time) * 1000, 4)
 
 
 def sanitize_request_id(request_id):

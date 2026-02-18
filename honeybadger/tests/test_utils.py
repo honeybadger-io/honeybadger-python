@@ -1,4 +1,12 @@
-from honeybadger.utils import filter_dict, filter_env_vars, sanitize_request_id
+import time
+from unittest.mock import patch
+
+from honeybadger.utils import (
+    filter_dict,
+    filter_env_vars,
+    get_duration,
+    sanitize_request_id,
+)
 
 
 def test_filter_dict():
@@ -69,6 +77,26 @@ def test_filter_env_vars_with_non_dict():
 
 def test_filter_env_vars_empty_dict():
     assert filter_env_vars({}) == {}
+
+
+def test_get_duration_returns_milliseconds():
+    start = time.monotonic()
+    time.sleep(0.05)
+    duration = get_duration(start)
+    assert isinstance(duration, float)
+    assert 30 <= duration <= 200
+
+
+def test_get_duration_returns_none_for_none():
+    assert get_duration(None) is None
+
+
+def test_get_duration_uses_monotonic():
+    with patch("honeybadger.utils.time") as mock_time:
+        mock_time.monotonic.return_value = 1000.150
+        result = get_duration(1000.050)
+        mock_time.monotonic.assert_called_once()
+        assert result == 100.0
 
 
 def test_sanitize_request_id():

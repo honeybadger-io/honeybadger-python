@@ -8,7 +8,7 @@ class DBHoneybadger:
     @staticmethod
     def django_execute(orig_exec):
         def wrapper(self, sql, params=None):
-            start = time.time()
+            start = time.monotonic()
             try:
                 return orig_exec(self, sql, params)
             finally:
