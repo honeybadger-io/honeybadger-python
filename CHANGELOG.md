@@ -3,6 +3,13 @@ All notable changes to this project will be documented in this file. See [Keep a
 CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
+## [1.1.2](https://github.com/honeybadger-io/honeybadger-python/compare/v1.1.1...v1.1.2) (2026-02-18)
+
+
+### Bug Fixes
+
+* use time.monotonic() for duration measurements ([#236](https://github.com/honeybadger-io/honeybadger-python/issues/236)) ([cae556f](https://github.com/honeybadger-io/honeybadger-python/commit/cae556f6fa538b8c8a22fbb038b2fa14dafdae51)), closes [#235](https://github.com/honeybadger-io/honeybadger-python/issues/235)
+
 ## [1.1.1](https://github.com/honeybadger-io/honeybadger-python/compare/v1.1.0...v1.1.1) (2026-01-30)
 
 
