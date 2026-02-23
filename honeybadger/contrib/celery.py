@@ -82,10 +82,13 @@ class CeleryHoneybadger(object):
             task_failure.connect(self._on_task_failure, weak=False)
         task_postrun.connect(self._on_task_postrun, weak=False)
 
+        # Always restart the events worker in forked worker processes so
+        # manual honeybadger.event() calls work even without Insights.
+        worker_process_init.connect(self._on_worker_process_init, weak=False)
+
         if honeybadger.config.insights_enabled:
             # Enable task events, as we need to listen to
             # task-finished events
-            worker_process_init.connect(self._on_worker_process_init, weak=False)
             task_prerun.connect(self._on_task_prerun, weak=False)
             before_task_publish.connect(self._on_before_task_publish, weak=False)
 
@@ -184,15 +187,17 @@ class CeleryHoneybadger(object):
         if self.report_exceptions:
             task_failure.disconnect(self._on_task_failure)
 
+        from celery.signals import worker_process_init
+
+        worker_process_init.disconnect(self._on_worker_process_init, weak=False)
+
         if honeybadger.config.insights_enabled:
             from celery.signals import (
                 task_prerun,
-                worker_process_init,
                 before_task_publish,
             )
 
             task_prerun.disconnect(self._on_task_prerun)
-            worker_process_init.disconnect(self._on_worker_process_init, weak=False)
             before_task_publish.disconnect(self._on_before_task_publish, weak=False)
 
     # Keep the misspelled method for backward compatibility

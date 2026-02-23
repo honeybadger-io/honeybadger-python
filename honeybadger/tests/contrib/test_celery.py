@@ -75,12 +75,12 @@ def test_plugin_payload():
         assert request["context"]["max_retries"] == 10
 
 
-def setup_celery_hb():
+def setup_celery_hb(insights_enabled=True):
     from celery.signals import worker_ready
 
     app = Celery(__name__, broker="memory://localhost/")
     app.conf.update(
-        HONEYBADGER_INSIGHTS_ENABLED=True,
+        HONEYBADGER_INSIGHTS_ENABLED=insights_enabled,
         HONEYBADGER_API_KEY="test_api_key",
     )
     hb = CeleryHoneybadger(app)
@@ -183,6 +183,91 @@ def test_worker_process_init(mock_events_worker):
     mock_events_worker.restart.assert_called_once()
 
     hb.tearDown()
+
+
+# We configure a very short timeout so that shutdown() returns quickly after
+# flushing — the worker sleeps events_timeout between flushes, so the default
+# 5s would make the child process hang before os._exit().
+@with_config({"events_timeout": 0.05})
+def test_worker_process_init_without_insights():
+    """Ensure that manual honeybadger.event() calls get sent within Celery tasks
+    even when Insights is not enabled. Celery's (default) prefork worker pool forks
+    worker processes via os.fork() and then fires a worker_process_init signal; our
+    events worker must be restarted on worker_process_init to ensure that the
+    events queue actually gets flushed. In other Celery worker pool configurations,
+    this is not an issue."""
+    import os
+    from celery.signals import worker_process_init
+    from honeybadger import honeybadger
+    from honeybadger.types import EventsSendResult, EventsSendStatus
+
+    app, hb = setup_celery_hb(insights_enabled=False)
+
+    # Pipe to communicate which event types were actually flushed to the
+    # connection. The child writes each event_type as it's sent; the parent
+    # reads after the child exits (closing the write end, causing EOF).
+    r_fd, w_fd = os.pipe()
+
+    class CapturingConnection:
+        def send_events(self, config, batch):
+            for e in batch:
+                os.write(w_fd, e.get("event_type", "").encode())
+            return EventsSendResult(EventsSendStatus.OK, None)
+
+    honeybadger.events_worker.connection = CapturingConnection()
+
+    pid = os.fork()
+    if pid == 0:
+        # Child process: simulates a Celery forked worker process.
+        # Python threads don't survive fork — the events worker thread is dead.
+        os.close(r_fd)
+        # Celery fires this signal in each forked worker process on startup.
+        worker_process_init.send(sender=app)
+        honeybadger.event("test.event", {"key": "value"})
+        honeybadger.events_worker.shutdown()
+        os.close(w_fd)
+        os._exit(0)
+    else:
+        os.close(w_fd)
+        os.waitpid(pid, 0)
+        # Read until EOF — the write end closes when the child exits.
+        with os.fdopen(r_fd, "rb") as f:
+            result = f.read()
+        assert b"test.event" in result
+
+    hb.tearDown()
+
+
+@with_config({"events_timeout": 0.05})
+def test_events_in_threads_mode():
+    """Ensure events flush correctly when called from a Celery threads pool worker.
+    Unlike prefork, the threads pool shares the same process so the events worker
+    thread stays alive and no worker_process_init restart is needed."""
+    from concurrent.futures import ThreadPoolExecutor
+    from honeybadger import honeybadger
+    from honeybadger.events_worker import EventsWorker
+    from honeybadger.types import EventsSendResult, EventsSendStatus
+
+    _, hb = setup_celery_hb(insights_enabled=False)
+
+    sent = []
+
+    class CapturingConnection:
+        def send_events(self, config, batch):
+            sent.extend(e.get("event_type", "") for e in batch)
+            return EventsSendResult(EventsSendStatus.OK, None)
+
+    honeybadger.events_worker = EventsWorker(CapturingConnection(), honeybadger.config)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        executor.submit(honeybadger.event, "test.event", {"key": "value"}).result()
+
+    honeybadger.events_worker.shutdown()
+
+    assert "test.event" in sent
+
+    hb.tearDown()
+
 
 
 @with_config({"insights_config": {"celery": {"disabled": True}}})
