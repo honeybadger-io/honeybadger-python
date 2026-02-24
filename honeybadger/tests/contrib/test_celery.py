@@ -185,6 +185,33 @@ def test_worker_process_init(mock_events_worker):
     hb.tearDown()
 
 
+class FakeCursorWrapper:
+    def __init__(self, *a, **kw):
+        pass
+
+    def execute(self, sql, params=None):
+        return f"original execute: {sql}"
+
+
+@patch("django.db.backends.utils.CursorWrapper", new=FakeCursorWrapper)
+@patch("honeybadger.honeybadger.event")
+def test_celery_instruments_django_cursor(mock_event):
+    """DB queries executed in a Celery task should generate db.query insight
+    events. Currently fails because CeleryHoneybadger.init_app() never patches
+    Django's CursorWrapper with DBHoneybadger.django_execute()."""
+    _, hb = setup_celery_hb()
+
+    cur = FakeCursorWrapper()
+    cur.execute("SELECT something")
+
+    # A db.query event should have been generated:
+    mock_event.assert_called_once()
+    args, kwargs = mock_event.call_args
+    assert args[0] == "db.query"
+
+    hb.tearDown()
+
+
 @with_config({"insights_config": {"celery": {"disabled": True}}})
 def test_can_disable():
     app, hb = setup_celery_hb()
