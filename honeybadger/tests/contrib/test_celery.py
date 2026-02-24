@@ -1,6 +1,9 @@
+import os
 import time
 import re
 from unittest.mock import patch, MagicMock
+
+import pytest
 
 from celery import Celery
 from honeybadger.contrib.celery import CeleryHoneybadger, CeleryPlugin
@@ -189,6 +192,7 @@ def test_worker_process_init(mock_events_worker):
 # flushing — the worker sleeps events_timeout between flushes, so the default
 # 5s would make the child process hang before os._exit().
 @with_config({"events_timeout": 0.05})
+@pytest.mark.skipif(not hasattr(os, "fork"), reason="os.fork() not available")
 def test_worker_process_init_without_insights():
     """Ensure that manual honeybadger.event() calls get sent within Celery tasks
     even when Insights is not enabled. Celery's (default) prefork worker pool forks
@@ -196,7 +200,6 @@ def test_worker_process_init_without_insights():
     events worker must be restarted on worker_process_init to ensure that the
     events queue actually gets flushed. In other Celery worker pool configurations,
     this is not an issue."""
-    import os
     from celery.signals import worker_process_init
     from honeybadger import honeybadger
     from honeybadger.types import EventsSendResult, EventsSendStatus
@@ -214,28 +217,31 @@ def test_worker_process_init_without_insights():
                 os.write(w_fd, e.get("event_type", "").encode())
             return EventsSendResult(EventsSendStatus.OK, None)
 
-    honeybadger.events_worker.connection = CapturingConnection()
+    original_connection = honeybadger.events_worker.connection
+    try:
+        honeybadger.events_worker.connection = CapturingConnection()
 
-    pid = os.fork()
-    if pid == 0:
-        # Child process: simulates a Celery forked worker process.
-        # Python threads don't survive fork — the events worker thread is dead.
-        os.close(r_fd)
-        # Celery fires this signal in each forked worker process on startup.
-        worker_process_init.send(sender=app)
-        honeybadger.event("test.event", {"key": "value"})
-        honeybadger.events_worker.shutdown()
-        os.close(w_fd)
-        os._exit(0)
-    else:
-        os.close(w_fd)
-        os.waitpid(pid, 0)
-        # Read until EOF — the write end closes when the child exits.
-        with os.fdopen(r_fd, "rb") as f:
-            result = f.read()
-        assert b"test.event" in result
-
-    hb.tearDown()
+        pid = os.fork()
+        if pid == 0:
+            # Child process: simulates a Celery forked worker process.
+            # Python threads don't survive fork — the events worker thread is dead.
+            os.close(r_fd)
+            # Celery fires this signal in each forked worker process on startup.
+            worker_process_init.send(sender=app)
+            honeybadger.event("test.event", {"key": "value"})
+            honeybadger.events_worker.shutdown()
+            os.close(w_fd)
+            os._exit(0)
+        else:
+            os.close(w_fd)
+            os.waitpid(pid, 0)
+            # Read until EOF — the write end closes when the child exits.
+            with os.fdopen(r_fd, "rb") as f:
+                result = f.read()
+            assert b"test.event" in result
+    finally:
+        honeybadger.events_worker.connection = original_connection
+        hb.tearDown()
 
 
 @with_config({"events_timeout": 0.05})
@@ -257,16 +263,19 @@ def test_events_in_threads_mode():
             sent.extend(e.get("event_type", "") for e in batch)
             return EventsSendResult(EventsSendStatus.OK, None)
 
-    honeybadger.events_worker = EventsWorker(CapturingConnection(), honeybadger.config)
+    previous_events_worker = honeybadger.events_worker
+    try:
+        honeybadger.events_worker = EventsWorker(CapturingConnection(), honeybadger.config)
 
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        executor.submit(honeybadger.event, "test.event", {"key": "value"}).result()
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            executor.submit(honeybadger.event, "test.event", {"key": "value"}).result()
 
-    honeybadger.events_worker.shutdown()
+        honeybadger.events_worker.shutdown()
 
-    assert "test.event" in sent
-
-    hb.tearDown()
+        assert "test.event" in sent
+    finally:
+        honeybadger.events_worker = previous_events_worker
+        hb.tearDown()
 
 
 
