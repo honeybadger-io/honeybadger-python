@@ -197,8 +197,7 @@ class FakeCursorWrapper:
 @patch("honeybadger.honeybadger.event")
 def test_celery_instruments_django_cursor(mock_event):
     """DB queries executed in a Celery task should generate db.query insight
-    events. Currently fails because CeleryHoneybadger.init_app() never patches
-    Django's CursorWrapper with DBHoneybadger.django_execute()."""
+    events."""
     _, hb = setup_celery_hb()
 
     cur = FakeCursorWrapper()
