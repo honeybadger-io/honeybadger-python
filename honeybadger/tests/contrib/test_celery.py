@@ -265,7 +265,9 @@ def test_events_in_threads_mode():
 
     previous_events_worker = honeybadger.events_worker
     try:
-        honeybadger.events_worker = EventsWorker(CapturingConnection(), honeybadger.config)
+        honeybadger.events_worker = EventsWorker(
+            CapturingConnection(), honeybadger.config
+        )
 
         with ThreadPoolExecutor(max_workers=1) as executor:
             executor.submit(honeybadger.event, "test.event", {"key": "value"}).result()
@@ -276,7 +278,6 @@ def test_events_in_threads_mode():
     finally:
         honeybadger.events_worker = previous_events_worker
         hb.tearDown()
-
 
 
 @with_config({"insights_config": {"celery": {"disabled": True}}})
