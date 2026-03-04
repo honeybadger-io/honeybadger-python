@@ -117,6 +117,7 @@ def test_is_dev_false_for_custom_non_dev_environments():
 
 
 def test_force_sync_defaults_true_in_lambda(monkeypatch):
+    monkeypatch.delenv("HONEYBADGER_FORCE_SYNC", raising=False)
     monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "my-function")
     c = Configuration()
     assert c.force_sync == True
@@ -124,6 +125,7 @@ def test_force_sync_defaults_true_in_lambda(monkeypatch):
 
 def test_force_sync_defaults_false_outside_lambda(monkeypatch):
     monkeypatch.delenv("AWS_LAMBDA_FUNCTION_NAME", raising=False)
+    monkeypatch.delenv("HONEYBADGER_FORCE_SYNC", raising=False)
     c = Configuration()
     assert c.force_sync == False
 
