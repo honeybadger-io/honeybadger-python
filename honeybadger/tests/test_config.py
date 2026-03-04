@@ -116,6 +116,31 @@ def test_is_dev_false_for_custom_non_dev_environments():
     assert c.is_dev() == False
 
 
+def test_force_sync_defaults_true_in_lambda(monkeypatch):
+    monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "my-function")
+    c = Configuration()
+    assert c.force_sync == True
+
+
+def test_force_sync_defaults_false_outside_lambda(monkeypatch):
+    monkeypatch.delenv("AWS_LAMBDA_FUNCTION_NAME", raising=False)
+    c = Configuration()
+    assert c.force_sync == False
+
+
+def test_force_sync_respects_explicit_false_in_lambda(monkeypatch):
+    monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "my-function")
+    c = Configuration(force_sync=False)
+    assert c.force_sync == False
+
+
+def test_force_sync_respects_env_var_in_lambda(monkeypatch):
+    monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "my-function")
+    monkeypatch.setenv("HONEYBADGER_FORCE_SYNC", "false")
+    c = Configuration()
+    assert c.force_sync == False
+
+
 def test_force_report_data_not_active():
     c = Configuration()
     assert c.force_report_data == False
