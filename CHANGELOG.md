@@ -3,6 +3,13 @@ All notable changes to this project will be documented in this file. See [Keep a
 CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
+## [1.1.3](https://github.com/honeybadger-io/honeybadger-python/compare/v1.1.2...v1.1.3) (2026-03-05)
+
+
+### Bug Fixes
+
+* auto-set force_sync=True in AWS Lambda ([#243](https://github.com/honeybadger-io/honeybadger-python/issues/243)) ([9dfd97f](https://github.com/honeybadger-io/honeybadger-python/commit/9dfd97fb055afef38834b11d5c5b088c04c8aee9))
+
 ## [1.1.2](https://github.com/honeybadger-io/honeybadger-python/compare/v1.1.1...v1.1.2) (2026-02-18)
 
 
