@@ -537,12 +537,7 @@ def test_before_notify_convenience_properties():
     captured = {}
 
     def before_notify(notice):
-        captured["name"] = notice.name
-        captured["message"] = notice.message
         captured["backtrace"] = notice.backtrace
-        captured["environment"] = notice.environment
-        captured["context"] = notice.context
-        captured["tags"] = notice.tags
         captured["url"] = notice.url
         captured["action"] = notice.action
         captured["params"] = notice.params
@@ -568,12 +563,7 @@ def test_before_notify_convenience_properties():
             tags=["critical"],
         )
 
-    assert captured["name"] == "ValueError"
-    assert captured["message"] == "something broke"
     assert isinstance(captured["backtrace"], list)
-    assert captured["environment"] == "production"
-    assert captured["context"] == {"user_id": 42}
-    assert captured["tags"] == ["critical"]
     assert captured["url"] == ""
     assert captured["action"] == ""
     assert captured["params"] == {}

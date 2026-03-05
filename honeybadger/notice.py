@@ -44,14 +44,6 @@ class Notice(object):
         return self.payload.get("error", {}).get("backtrace", [])
 
     @property
-    def message(self):
-        return self.payload.get("error", {}).get("message", "")
-
-    @property
-    def name(self):
-        return self.payload.get("error", {}).get("class", "")
-
-    @property
     def url(self):
         return self.payload.get("request", {}).get("url", "")
 
@@ -67,9 +59,6 @@ class Notice(object):
     def params(self):
         return self.payload.get("request", {}).get("params", {})
 
-    @property
-    def environment(self):
-        return self.payload.get("server", {}).get("environment_name", "")
 
     def excluded_exception(self):
         if self.config.excluded_exceptions:
