@@ -120,6 +120,15 @@ class Configuration(BaseConfig):
         super().__init__()
         self.set_12factor_config()
         self.set_config_from_dict(kwargs)
+        self._apply_lambda_defaults(kwargs)
+
+    def _apply_lambda_defaults(self, kwargs):
+        """Auto-set force_sync=True in AWS Lambda environments unless explicitly configured."""
+        if self.is_aws_lambda_environment:
+            env_force_sync = os.environ.get("HONEYBADGER_FORCE_SYNC")
+            explicitly_set = "force_sync" in kwargs or env_force_sync is not None
+            if not explicitly_set:
+                self.force_sync = True
 
     def set_12factor_config(self):
         for f in fields(self):
