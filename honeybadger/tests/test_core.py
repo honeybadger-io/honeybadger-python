@@ -542,6 +542,12 @@ def test_before_notify_convenience_properties():
         captured["action"] = notice.action
         captured["params"] = notice.params
         captured["component"] = notice.component
+        captured["controller"] = notice.controller
+        captured["cgi_data"] = notice.cgi_data
+        captured["session"] = notice.session
+        captured["local_variables"] = notice.local_variables
+        captured["causes"] = notice.causes
+        captured["id"] = notice.id
         return notice
 
     def test_payload(request):
@@ -568,6 +574,12 @@ def test_before_notify_convenience_properties():
     assert captured["action"] == ""
     assert captured["params"] == {}
     assert captured["component"] == ""
+    assert captured["controller"] == ""
+    assert captured["cgi_data"] == {}
+    assert captured["session"] == {}
+    assert captured["local_variables"] is None
+    assert isinstance(captured["causes"], list)
+    assert isinstance(captured["id"], str)
 
 
 @pytest.mark.parametrize(

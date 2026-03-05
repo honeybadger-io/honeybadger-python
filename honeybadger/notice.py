@@ -59,6 +59,29 @@ class Notice(object):
     def params(self):
         return self.payload.get("request", {}).get("params", {})
 
+    @property
+    def cgi_data(self):
+        return self.payload.get("request", {}).get("cgi_data", {})
+
+    @property
+    def session(self):
+        return self.payload.get("request", {}).get("session", {})
+
+    @property
+    def local_variables(self):
+        return self.payload.get("request", {}).get("local_variables")
+
+    @property
+    def causes(self):
+        return self.payload.get("error", {}).get("causes", [])
+
+    @property
+    def id(self):
+        return self.payload.get("error", {}).get("token")
+
+    @property
+    def controller(self):
+        return self.component
 
     def excluded_exception(self):
         if self.config.excluded_exceptions:
