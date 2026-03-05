@@ -38,6 +38,39 @@ class Notice(object):
             correlation_context=self._correlation_context(),
         )
 
+    # Convenience properties for accessing payload data in before_notify callbacks.
+    @property
+    def backtrace(self):
+        return self.payload.get("error", {}).get("backtrace", [])
+
+    @property
+    def message(self):
+        return self.payload.get("error", {}).get("message", "")
+
+    @property
+    def name(self):
+        return self.payload.get("error", {}).get("class", "")
+
+    @property
+    def url(self):
+        return self.payload.get("request", {}).get("url", "")
+
+    @property
+    def component(self):
+        return self.payload.get("request", {}).get("component", "")
+
+    @property
+    def action(self):
+        return self.payload.get("request", {}).get("action", "")
+
+    @property
+    def params(self):
+        return self.payload.get("request", {}).get("params", {})
+
+    @property
+    def environment(self):
+        return self.payload.get("server", {}).get("environment_name", "")
+
     def excluded_exception(self):
         if self.config.excluded_exceptions:
             if (

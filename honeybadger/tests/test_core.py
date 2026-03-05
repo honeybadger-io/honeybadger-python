@@ -532,6 +532,54 @@ def test_notify_with_before_notify_changes():
         )
 
 
+def test_before_notify_convenience_properties():
+    """Test that Notice exposes convenience properties for before_notify callbacks (issue #245)."""
+    captured = {}
+
+    def before_notify(notice):
+        captured["name"] = notice.name
+        captured["message"] = notice.message
+        captured["backtrace"] = notice.backtrace
+        captured["environment"] = notice.environment
+        captured["context"] = notice.context
+        captured["tags"] = notice.tags
+        captured["url"] = notice.url
+        captured["action"] = notice.action
+        captured["params"] = notice.params
+        captured["component"] = notice.component
+        return notice
+
+    def test_payload(request):
+        pass
+
+    hb = Honeybadger()
+
+    with mock_urlopen(test_payload) as request_mock:
+        hb.configure(
+            api_key="aaa",
+            force_report_data=True,
+            environment="production",
+            before_notify=before_notify,
+        )
+        hb.notify(
+            error_class="ValueError",
+            error_message="something broke",
+            context=dict(user_id=42),
+            tags=["critical"],
+        )
+
+    assert captured["name"] == "ValueError"
+    assert captured["message"] == "something broke"
+    assert isinstance(captured["backtrace"], list)
+    assert captured["environment"] == "production"
+    assert captured["context"] == {"user_id": 42}
+    assert captured["tags"] == ["critical"]
+    assert captured["url"] == ""
+    assert captured["action"] == ""
+    assert captured["params"] == {}
+    assert captured["component"] == ""
+
+
 @pytest.mark.parametrize(
     "sample_rate,expected_calls",
     [
