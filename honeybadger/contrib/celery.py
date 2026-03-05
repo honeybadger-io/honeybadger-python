@@ -88,6 +88,7 @@ class CeleryHoneybadger(object):
             worker_process_init.connect(self._on_worker_process_init, weak=False)
             task_prerun.connect(self._on_task_prerun, weak=False)
             before_task_publish.connect(self._on_before_task_publish, weak=False)
+            self._patch_cursor()
 
     def _initialize_honeybadger(self, config):
         """
@@ -101,6 +102,16 @@ class CeleryHoneybadger(object):
 
         honeybadger.configure(**config_kwargs)
         honeybadger.config.set_12factor_config()  # environment should override celery settings
+
+    def _patch_cursor(self):
+        try:
+            from django.db.backends.utils import CursorWrapper
+            from honeybadger.contrib.db import DBHoneybadger
+
+            orig_exec = CursorWrapper.execute
+            CursorWrapper.execute = DBHoneybadger.django_execute(orig_exec)
+        except ImportError:
+            pass
 
     def _on_worker_process_init(self, *args, **kwargs):
         # Restart the events worker to ensure it is running in the new worker
