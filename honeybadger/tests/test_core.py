@@ -582,6 +582,47 @@ def test_before_notify_convenience_properties():
     assert isinstance(captured["id"], str)
 
 
+def test_before_notify_setters():
+    """Test that Notice properties can be modified in before_notify callbacks."""
+
+    def before_notify(notice):
+        notice.backtrace = [{"file": "test.py", "number": 1, "method": "test"}]
+        notice.url = "https://example.com/test"
+        notice.component = "TestController"
+        notice.action = "index"
+        notice.params = {"key": "value"}
+        notice.cgi_data = {"REQUEST_METHOD": "POST"}
+        notice.session = {"user_id": 123}
+        notice.local_variables = {"x": 1}
+        notice.causes = []
+        notice.controller = "OverriddenController"
+        return notice
+
+    def test_payload(request):
+        payload = json.loads(request.data.decode("utf-8"))
+        assert payload["error"]["backtrace"] == [
+            {"file": "test.py", "number": 1, "method": "test"}
+        ]
+        assert payload["request"]["url"] == "https://example.com/test"
+        assert payload["request"]["component"] == "OverriddenController"
+        assert payload["request"]["action"] == "index"
+        assert payload["request"]["params"] == {"key": "value"}
+        assert payload["request"]["cgi_data"] == {"REQUEST_METHOD": "POST"}
+        assert payload["request"]["session"] == {"user_id": 123}
+        assert payload["request"]["local_variables"] == {"x": 1}
+        assert payload["error"]["causes"] == []
+
+    hb = Honeybadger()
+
+    with mock_urlopen(test_payload) as request_mock:
+        hb.configure(
+            api_key="aaa",
+            force_report_data=True,
+            before_notify=before_notify,
+        )
+        hb.notify(error_class="Exception", error_message="Test.")
+
+
 @pytest.mark.parametrize(
     "sample_rate,expected_calls",
     [

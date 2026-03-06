@@ -38,42 +38,82 @@ class Notice(object):
             correlation_context=self._correlation_context(),
         )
 
-    # Convenience properties for accessing payload data in before_notify callbacks.
+    # Convenience properties for accessing/modifying payload data in before_notify
+    # callbacks. Accessing any of these triggers payload generation (cached on first
+    # access). After that, use these properties or notice.payload directly to read/write
+    # values — changes to notice.context or notice.tags will still be reflected since
+    # the payload holds references to the same objects.
     @property
     def backtrace(self):
         return self.payload.get("error", {}).get("backtrace", [])
+
+    @backtrace.setter
+    def backtrace(self, value):
+        self.payload["error"]["backtrace"] = value
 
     @property
     def url(self):
         return self.payload.get("request", {}).get("url", "")
 
+    @url.setter
+    def url(self, value):
+        self.payload["request"]["url"] = value
+
     @property
     def component(self):
         return self.payload.get("request", {}).get("component", "")
+
+    @component.setter
+    def component(self, value):
+        self.payload["request"]["component"] = value
 
     @property
     def action(self):
         return self.payload.get("request", {}).get("action", "")
 
+    @action.setter
+    def action(self, value):
+        self.payload["request"]["action"] = value
+
     @property
     def params(self):
         return self.payload.get("request", {}).get("params", {})
+
+    @params.setter
+    def params(self, value):
+        self.payload["request"]["params"] = value
 
     @property
     def cgi_data(self):
         return self.payload.get("request", {}).get("cgi_data", {})
 
+    @cgi_data.setter
+    def cgi_data(self, value):
+        self.payload["request"]["cgi_data"] = value
+
     @property
     def session(self):
         return self.payload.get("request", {}).get("session", {})
+
+    @session.setter
+    def session(self, value):
+        self.payload["request"]["session"] = value
 
     @property
     def local_variables(self):
         return self.payload.get("request", {}).get("local_variables")
 
+    @local_variables.setter
+    def local_variables(self, value):
+        self.payload["request"]["local_variables"] = value
+
     @property
     def causes(self):
         return self.payload.get("error", {}).get("causes", [])
+
+    @causes.setter
+    def causes(self, value):
+        self.payload["error"]["causes"] = value
 
     @property
     def id(self):
@@ -82,6 +122,10 @@ class Notice(object):
     @property
     def controller(self):
         return self.component
+
+    @controller.setter
+    def controller(self, value):
+        self.component = value
 
     def excluded_exception(self):
         if self.config.excluded_exceptions:
