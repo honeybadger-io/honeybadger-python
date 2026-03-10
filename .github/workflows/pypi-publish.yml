@@ -23,6 +23,7 @@ jobs:
   publish:
     needs: [ test ]
     runs-on: ubuntu-22.04
+    timeout-minutes: 10
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
