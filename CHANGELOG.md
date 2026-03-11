@@ -3,6 +3,18 @@ All notable changes to this project will be documented in this file. See [Keep a
 CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
+## [1.2.0](https://github.com/honeybadger-io/honeybadger-python/compare/v1.1.3...v1.2.0) (2026-03-11)
+
+
+### Features
+
+* add convenience properties to Notice for before_notify callbacks ([#247](https://github.com/honeybadger-io/honeybadger-python/issues/247)) ([32bd1c2](https://github.com/honeybadger-io/honeybadger-python/commit/32bd1c2b1006d30ffcfbeb7cff0a96f608ab4a4c))
+
+
+### Bug Fixes
+
+* ensure celery prefork workers send manual `event()`s regardless of Insights ([#240](https://github.com/honeybadger-io/honeybadger-python/issues/240)) ([0633997](https://github.com/honeybadger-io/honeybadger-python/commit/06339974722c8b320228f367ed52528eca24a797))
+
 ## [1.1.3](https://github.com/honeybadger-io/honeybadger-python/compare/v1.1.2...v1.1.3) (2026-03-05)
 
 
