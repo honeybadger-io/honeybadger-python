@@ -29,4 +29,4 @@ asgiref
 celery-types
 
 # For Python 3.10+ which removed cgi module
-legacy-cgi==2.6.3
+legacy-cgi==2.6.4
