@@ -38,7 +38,7 @@ jobs:
 
       - name: Setup python
         if: ${{ steps.release.outputs.release_created }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: '3.9'
 
