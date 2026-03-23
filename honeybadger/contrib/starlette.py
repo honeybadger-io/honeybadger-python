@@ -28,6 +28,16 @@ _current_request: ContextVar[Optional[Request]] = ContextVar(
 
 _plugin_registered = False
 
+# CGI-style header keys that carry credentials and should never be sent in
+# error payloads.  Users can still allowlist them via configuration if needed.
+_SENSITIVE_CGI_HEADERS = frozenset(
+    {
+        "HTTP_AUTHORIZATION",
+        "HTTP_PROXY_AUTHORIZATION",
+        "HTTP_COOKIE",
+    }
+)
+
 
 class StarlettePlugin(Plugin):
     """Plugin to extract Starlette request data for error payloads."""
@@ -49,7 +59,8 @@ class StarlettePlugin(Plugin):
         cgi_data = {}
         for key, value in request.headers.items():
             cgi_key = "HTTP_" + key.upper().replace("-", "_")
-            cgi_data[cgi_key] = value
+            if cgi_key not in _SENSITIVE_CGI_HEADERS:
+                cgi_data[cgi_key] = value
         cgi_data["REQUEST_METHOD"] = request.method
 
         params = {}

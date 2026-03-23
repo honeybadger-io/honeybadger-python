@@ -249,7 +249,6 @@ class StarlettePluginTestCase(unittest.TestCase):
             "query_string": b"",
             "headers": [
                 (b"host", b"testserver"),
-                (b"authorization", b"Bearer secret-token"),
                 (b"x-custom", b"safe-value"),
             ],
         }
@@ -262,7 +261,7 @@ class StarlettePluginTestCase(unittest.TestCase):
         plugin = StarlettePlugin()
         payload = {"request": {}}
         config = mock.Mock()
-        config.params_filters = ["HTTP_AUTHORIZATION"]
+        config.params_filters = []
         context = {"starlette_request": request}
 
         plugin.generate_payload(payload, config, context)
@@ -274,6 +273,50 @@ class StarlettePluginTestCase(unittest.TestCase):
         self.assertIn("REQUEST_METHOD", cgi_data)
         # Raw header names should not be present
         self.assertNotIn("host", cgi_data)
-        self.assertNotIn("authorization", cgi_data)
-        # Sensitive headers in params_filters are redacted
-        self.assertEqual(cgi_data["HTTP_AUTHORIZATION"], "[FILTERED]")
+        self.assertNotIn("x-custom", cgi_data)
+
+    def test_generate_payload_strips_sensitive_headers(self):
+        from honeybadger.contrib.starlette import StarlettePlugin
+
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "scheme": "http",
+            "path": "/ok",
+            "root_path": "",
+            "query_string": b"",
+            "headers": [
+                (b"host", b"testserver"),
+                (b"authorization", b"Bearer secret-token"),
+                (b"proxy-authorization", b"Basic creds"),
+                (b"cookie", b"session=abc123"),
+                (b"x-custom", b"safe-value"),
+            ],
+        }
+
+        async def receive():
+            return {"type": "http.request"}
+
+        request = Request(scope, receive)
+
+        plugin = StarlettePlugin()
+        payload = {"request": {}}
+        config = mock.Mock()
+        config.params_filters = []
+        context = {"starlette_request": request}
+
+        plugin.generate_payload(payload, config, context)
+
+        cgi_data = payload["request"]["cgi_data"]
+        # Credential-bearing headers must be completely absent
+        self.assertNotIn("HTTP_AUTHORIZATION", cgi_data)
+        self.assertNotIn("HTTP_PROXY_AUTHORIZATION", cgi_data)
+        self.assertNotIn("HTTP_COOKIE", cgi_data)
+        # Non-sensitive headers should still be present
+        self.assertIn("HTTP_HOST", cgi_data)
+        self.assertIn("HTTP_X_CUSTOM", cgi_data)
+        # Raw secret values must not appear anywhere in the cgi_data values
+        all_values = " ".join(cgi_data.values())
+        self.assertNotIn("secret-token", all_values)
+        self.assertNotIn("abc123", all_values)
+        self.assertNotIn("creds", all_values)
