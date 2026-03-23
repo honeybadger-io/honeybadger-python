@@ -17,7 +17,9 @@ from starlette.routing import Match
 
 logger = logging.getLogger(__name__)
 
-_current_request: ContextVar[Optional[Request]] = ContextVar("_current_request", default=None)
+_current_request: ContextVar[Optional[Request]] = ContextVar(
+    "_current_request", default=None
+)
 
 _plugin_registered = False
 
@@ -92,7 +94,9 @@ class StarletteHoneybadger(BaseHTTPMiddleware):
 
         super().__init__(app)
 
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         start = time.monotonic()
         request_id = sanitize_request_id(request.headers.get("x-request-id"))
         if not request_id:
@@ -112,6 +116,7 @@ class StarletteHoneybadger(BaseHTTPMiddleware):
             # Skip HTTP exceptions (4xx errors etc.) like FastAPI integration
             try:
                 from starlette.exceptions import HTTPException
+
                 if isinstance(exc, HTTPException):
                     status_code = exc.status_code
                     raise
@@ -130,7 +135,10 @@ class StarletteHoneybadger(BaseHTTPMiddleware):
             _current_request.reset(token)
             try:
                 starlette_config = honeybadger.config.insights_config.starlette
-                if honeybadger.config.insights_enabled and not starlette_config.disabled:
+                if (
+                    honeybadger.config.insights_enabled
+                    and not starlette_config.disabled
+                ):
                     route_path, route_name = _match_route(request)
                     payload = {
                         "method": request.method,

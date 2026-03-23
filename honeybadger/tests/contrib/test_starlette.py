@@ -52,9 +52,7 @@ class StarletteMiddlewareTestCase(unittest.TestCase):
         response = self.client.get("/error")
         self.assertEqual(response.status_code, 500)
         self.hb.notify.assert_called_once()
-        self.assertEqual(
-            type(self.hb.notify.call_args.kwargs["exception"]), SomeError
-        )
+        self.assertEqual(type(self.hb.notify.call_args.kwargs["exception"]), SomeError)
 
     def test_should_begin_request(self):
         self.client.get("/ok")

@@ -8,7 +8,7 @@ from honeybadger.contrib.celery import CeleryHoneybadger
 try:
     from honeybadger.contrib.starlette import StarletteHoneybadger
 except ImportError:
-    StarletteHoneybadger = None
+    pass
 
 __all__ = [
     "FlaskHoneybadger",
@@ -17,7 +17,5 @@ __all__ = [
     "HoneybadgerHandler",
     "ASGIHoneybadger",
     "CeleryHoneybadger",
+    "StarletteHoneybadger",
 ]
-
-if StarletteHoneybadger is not None:
-    __all__.append("StarletteHoneybadger")
