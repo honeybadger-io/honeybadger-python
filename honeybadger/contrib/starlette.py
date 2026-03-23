@@ -26,8 +26,8 @@ _current_request: ContextVar[Optional[Request]] = ContextVar(
     "_current_request", default=None
 )
 
-# CGI-style header keys that carry credentials and should never be sent in
-# error payloads.  Users can still allowlist them via configuration if needed.
+# CGI-style header keys that carry credentials and are always stripped
+# from error payloads.
 _SENSITIVE_CGI_HEADERS = frozenset(
     {
         "HTTP_AUTHORIZATION",
@@ -67,7 +67,7 @@ class StarlettePlugin(Plugin):
             params[key] = values if len(values) > 1 else values[0] if values else None
 
         payload = {
-            "url": str(request.url),
+            "url": str(request.url.replace(query=None)),
             "component": route or request.url.path,
             "action": route_name or request.method,
             "params": filter_dict(params, config.params_filters),
@@ -104,7 +104,8 @@ class StarletteHoneybadger(BaseHTTPMiddleware):
         if kwargs:
             honeybadger.configure(**kwargs)
 
-        default_plugin_manager.register(StarlettePlugin())
+        if "Starlette" not in default_plugin_manager._registered:
+            default_plugin_manager.register(StarlettePlugin())
 
         super().__init__(app)
 

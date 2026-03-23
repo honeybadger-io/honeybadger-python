@@ -203,6 +203,8 @@ class StarlettePluginTestCase(unittest.TestCase):
 
         self.assertEqual(request_payload.get("method"), "GET")
         self.assertEqual(request_payload.get("path"), "/ok")
+        # URL should not include the query string
+        self.assertEqual(request_payload.get("url"), "http://testserver/ok")
 
         params = request_payload.get("params", {})
         self.assertIn("x", params)
@@ -248,6 +250,37 @@ class StarlettePluginTestCase(unittest.TestCase):
         if "password" in params:
             self.assertNotEqual(params["password"], "secret")
         self.assertIn("x", params)
+
+    def test_generate_payload_url_excludes_query_string(self):
+        from honeybadger.contrib.starlette import StarlettePlugin
+
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "scheme": "http",
+            "path": "/ok",
+            "root_path": "",
+            "query_string": b"password=secret&x=1",
+            "headers": [(b"host", b"testserver")],
+        }
+
+        async def receive():
+            return {"type": "http.request"}
+
+        request = Request(scope, receive)
+
+        plugin = StarlettePlugin()
+        payload = {"request": {}}
+        config = mock.Mock()
+        config.params_filters = ["password"]
+        context = {"starlette_request": request}
+
+        plugin.generate_payload(payload, config, context)
+
+        url = payload["request"]["url"]
+        self.assertEqual(url, "http://testserver/ok")
+        self.assertNotIn("password", url)
+        self.assertNotIn("secret", url)
 
     def test_generate_payload_converts_headers_to_cgi_format(self):
         from honeybadger.contrib.starlette import StarlettePlugin
