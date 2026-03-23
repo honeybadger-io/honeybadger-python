@@ -6,7 +6,12 @@ from typing import Optional
 
 from honeybadger import honeybadger
 from honeybadger.plugins import Plugin, default_plugin_manager
-from honeybadger.utils import filter_dict, get_duration, sanitize_request_id
+from honeybadger.utils import (
+    filter_dict,
+    filter_env_vars,
+    get_duration,
+    sanitize_request_id,
+)
 from honeybadger.contrib.asgi import _as_context
 
 from starlette.types import ASGIApp
@@ -41,7 +46,10 @@ class StarlettePlugin(Plugin):
 
         route, route_name = _match_route(request)
 
-        cgi_data = {k: v for k, v in request.headers.items()}
+        cgi_data = {}
+        for key, value in request.headers.items():
+            cgi_key = "HTTP_" + key.upper().replace("-", "_")
+            cgi_data[cgi_key] = value
         cgi_data["REQUEST_METHOD"] = request.method
 
         params = {}
@@ -54,7 +62,7 @@ class StarlettePlugin(Plugin):
             "component": route or request.url.path,
             "action": route_name or request.method,
             "params": filter_dict(params, config.params_filters),
-            "cgi_data": filter_dict(cgi_data, config.params_filters),
+            "cgi_data": filter_dict(filter_env_vars(cgi_data), config.params_filters),
             "context": context,
             "method": request.method,
             "path": request.url.path,

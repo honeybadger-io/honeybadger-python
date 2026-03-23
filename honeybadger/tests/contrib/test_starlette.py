@@ -236,3 +236,44 @@ class StarlettePluginTestCase(unittest.TestCase):
         if "password" in params:
             self.assertNotEqual(params["password"], "secret")
         self.assertIn("x", params)
+
+    def test_generate_payload_converts_headers_to_cgi_format(self):
+        from honeybadger.contrib.starlette import StarlettePlugin
+
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "scheme": "http",
+            "path": "/ok",
+            "root_path": "",
+            "query_string": b"",
+            "headers": [
+                (b"host", b"testserver"),
+                (b"authorization", b"Bearer secret-token"),
+                (b"x-custom", b"safe-value"),
+            ],
+        }
+
+        async def receive():
+            return {"type": "http.request"}
+
+        request = Request(scope, receive)
+
+        plugin = StarlettePlugin()
+        payload = {"request": {}}
+        config = mock.Mock()
+        config.params_filters = ["HTTP_AUTHORIZATION"]
+        context = {"starlette_request": request}
+
+        plugin.generate_payload(payload, config, context)
+
+        cgi_data = payload["request"]["cgi_data"]
+        # Headers are converted to CGI-style HTTP_ prefix format
+        self.assertIn("HTTP_HOST", cgi_data)
+        self.assertIn("HTTP_X_CUSTOM", cgi_data)
+        self.assertIn("REQUEST_METHOD", cgi_data)
+        # Raw header names should not be present
+        self.assertNotIn("host", cgi_data)
+        self.assertNotIn("authorization", cgi_data)
+        # Sensitive headers in params_filters are redacted
+        self.assertEqual(cgi_data["HTTP_AUTHORIZATION"], "[FILTERED]")
