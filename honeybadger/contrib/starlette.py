@@ -124,6 +124,10 @@ class StarletteHoneybadger(BaseHTTPMiddleware):
 
         status_code = 500
         try:
+            # BaseHTTPMiddleware buffers the response body, so call_next
+            # returns after the full response is generated. Duration
+            # measured in the finally block reflects request processing
+            # time but excludes any BackgroundTask execution.
             response = await call_next(request)
             status_code = response.status_code
             return response
@@ -179,6 +183,7 @@ class StarletteHoneybadger(BaseHTTPMiddleware):
 
                     honeybadger.event("starlette.request", payload)
                 honeybadger.reset_context()
+                honeybadger.reset_event_context()
             except Exception as e:
                 logger.warning(
                     f"Exception while sending Honeybadger event: {e}", exc_info=True

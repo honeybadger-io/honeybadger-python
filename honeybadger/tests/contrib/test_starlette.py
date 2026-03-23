@@ -78,6 +78,11 @@ class StarletteMiddlewareTestCase(unittest.TestCase):
         self.client.get("/ok")
         self.hb.reset_context.assert_called()
 
+    def test_should_reset_event_context(self):
+        self.hb.config.insights_enabled = False
+        self.client.get("/ok")
+        self.hb.reset_event_context.assert_called()
+
     def test_should_set_event_context_with_request_id(self):
         self.hb.config.insights_enabled = False
         self.client.get("/ok")
