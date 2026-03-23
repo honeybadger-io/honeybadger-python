@@ -63,6 +63,28 @@ class StarletteMiddlewareTestCase(unittest.TestCase):
         self.hb.notify.assert_called_once()
         self.assertEqual(type(self.hb.notify.call_args.kwargs["exception"]), SomeError)
 
+    def test_should_strip_sensitive_headers_from_error_context(self):
+        self.client.get(
+            "/error",
+            headers={
+                "authorization": "Bearer secret-token",
+                "cookie": "session=abc123",
+                "x-custom": "safe-value",
+            },
+        )
+        self.hb.notify.assert_called_once()
+        ctx = self.hb.notify.call_args.kwargs["context"]
+        headers = ctx.get("headers", {})
+        # Sensitive headers must not appear in the error context
+        all_keys = " ".join(str(k) for k in headers.keys()).lower()
+        all_values = " ".join(str(v) for v in headers.values()).lower()
+        self.assertNotIn("authorization", all_keys)
+        self.assertNotIn("cookie", all_keys)
+        self.assertNotIn("secret-token", all_values)
+        self.assertNotIn("abc123", all_values)
+        # Non-sensitive headers should still be present
+        self.assertIn("x-custom", all_keys)
+
     def test_should_not_notify_on_http_exception(self):
         response = self.client.get("/not-found")
         self.assertEqual(response.status_code, 404)

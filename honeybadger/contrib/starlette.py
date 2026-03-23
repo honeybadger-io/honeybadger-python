@@ -139,6 +139,7 @@ class StarletteHoneybadger:
             logger.warning(
                 f"Exception while sending Honeybadger event: {e}", exc_info=True
             )
+
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
@@ -187,6 +188,18 @@ class StarletteHoneybadger:
             notify_scope = dict(scope)
             if body:
                 notify_scope["body"] = bytes(body)
+            # Strip credential-bearing headers before building the
+            # error context so they never reach the notice payload.
+            if "headers" in notify_scope:
+                raw_headers = notify_scope["headers"]
+                notify_scope["headers"] = [
+                    (k, v)
+                    for k, v in raw_headers
+                    if (
+                        "HTTP_" + k.decode("latin-1").upper().replace("-", "_")
+                    )
+                    not in _SENSITIVE_CGI_HEADERS
+                ]
             honeybadger.notify(exception=exc, context=_as_context(notify_scope))
             raise
         finally:
