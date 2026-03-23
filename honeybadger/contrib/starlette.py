@@ -1,20 +1,25 @@
 import logging
 import time
-import urllib
 import uuid
+from contextvars import ContextVar
+from typing import Optional
 
 from honeybadger import honeybadger
 from honeybadger.plugins import Plugin, default_plugin_manager
 from honeybadger.utils import filter_dict, get_duration, sanitize_request_id
-from honeybadger.contrib.asgi import _get_headers, _get_query, _get_url, _get_body, _as_context
+from honeybadger.contrib.asgi import _as_context
 
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.types import ASGIApp
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.routing import Match
 
 logger = logging.getLogger(__name__)
+
+_current_request: ContextVar[Optional[Request]] = ContextVar("_current_request", default=None)
+
+_plugin_registered = False
 
 
 class StarlettePlugin(Plugin):
@@ -24,10 +29,11 @@ class StarlettePlugin(Plugin):
         super().__init__("Starlette")
 
     def supports(self, config, context):
-        return context.get("starlette_request") is not None
+        request = context.get("starlette_request") or _current_request.get()
+        return request is not None
 
     def generate_payload(self, default_payload, config, context):
-        request = context.get("starlette_request")
+        request = context.get("starlette_request") or _current_request.get()
         if request is None:
             return default_payload
 
@@ -36,17 +42,21 @@ class StarlettePlugin(Plugin):
         cgi_data = {k: v for k, v in request.headers.items()}
         cgi_data["REQUEST_METHOD"] = request.method
 
+        params = {}
+        for key in request.query_params:
+            values = request.query_params.getlist(key)
+            params[key] = values if len(values) > 1 else values[0] if values else None
+
         payload = {
             "url": str(request.url),
             "component": route or request.url.path,
             "action": route_name or request.method,
-            "params": {},
+            "params": filter_dict(params, config.params_filters),
             "cgi_data": filter_dict(cgi_data, config.params_filters),
             "context": context,
+            "method": request.method,
+            "path": request.url.path,
         }
-
-        params = dict(request.query_params)
-        payload["params"] = filter_dict(params, config.params_filters)
 
         default_payload["request"].update(payload)
         return default_payload
@@ -54,7 +64,10 @@ class StarlettePlugin(Plugin):
 
 def _match_route(request: Request):
     """Try to match the request to a route and return (route_path, route_name)."""
-    app = request.app
+    try:
+        app = request.app
+    except (KeyError, AttributeError):
+        return None, None
     routes = getattr(app, "routes", [])
     for route in routes:
         match, _ = route.matches(request.scope)
@@ -72,7 +85,11 @@ class StarletteHoneybadger(BaseHTTPMiddleware):
         if kwargs:
             honeybadger.configure(**kwargs)
 
-        default_plugin_manager.register(StarlettePlugin())
+        global _plugin_registered
+        if not _plugin_registered:
+            default_plugin_manager.register(StarlettePlugin())
+            _plugin_registered = True
+
         super().__init__(app)
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
@@ -81,8 +98,10 @@ class StarletteHoneybadger(BaseHTTPMiddleware):
         if not request_id:
             request_id = str(uuid.uuid4())
 
-        honeybadger.begin_request()
+        honeybadger.begin_request(request)
         honeybadger.set_event_context(request_id=request_id)
+
+        token = _current_request.set(request)
 
         status_code = 500
         try:
@@ -90,6 +109,15 @@ class StarletteHoneybadger(BaseHTTPMiddleware):
             status_code = response.status_code
             return response
         except Exception as exc:
+            # Skip HTTP exceptions (4xx errors etc.) like FastAPI integration
+            try:
+                from starlette.exceptions import HTTPException
+                if isinstance(exc, HTTPException):
+                    status_code = exc.status_code
+                    raise
+            except ImportError:
+                pass
+
             scope = dict(request.scope)
             try:
                 body = await request.body()
@@ -99,6 +127,7 @@ class StarletteHoneybadger(BaseHTTPMiddleware):
             honeybadger.notify(exception=exc, context=_as_context(scope))
             raise
         finally:
+            _current_request.reset(token)
             try:
                 starlette_config = honeybadger.config.insights_config.starlette
                 if honeybadger.config.insights_enabled and not starlette_config.disabled:

@@ -35,49 +35,51 @@ def build_app(**kwargs):
 
 class StarletteMiddlewareTestCase(unittest.TestCase):
     def setUp(self):
+        self.hb_patcher = mock.patch("honeybadger.contrib.starlette.honeybadger")
+        self.hb = self.hb_patcher.start()
         self.app = build_app(api_key="test-key")
         self.client = TestClient(self.app, raise_server_exceptions=False)
 
-    @mock.patch("honeybadger.contrib.starlette.honeybadger")
-    def test_should_not_notify_on_ok_route(self, hb):
+    def tearDown(self):
+        self.hb_patcher.stop()
+
+    def test_should_not_notify_on_ok_route(self):
         response = self.client.get("/ok")
         self.assertEqual(response.status_code, 200)
-        hb.notify.assert_not_called()
+        self.hb.notify.assert_not_called()
 
-    @mock.patch("honeybadger.contrib.starlette.honeybadger")
-    def test_should_notify_on_error_route(self, hb):
+    def test_should_notify_on_error_route(self):
         response = self.client.get("/error")
         self.assertEqual(response.status_code, 500)
-        hb.notify.assert_called_once()
+        self.hb.notify.assert_called_once()
         self.assertEqual(
-            type(hb.notify.call_args.kwargs["exception"]), SomeError
+            type(self.hb.notify.call_args.kwargs["exception"]), SomeError
         )
 
-    @mock.patch("honeybadger.contrib.starlette.honeybadger")
-    def test_should_begin_request(self, hb):
+    def test_should_begin_request(self):
         self.client.get("/ok")
-        hb.begin_request.assert_called_once()
+        self.hb.begin_request.assert_called_once()
+        # Verify begin_request was called with the request object
+        args = self.hb.begin_request.call_args.args
+        self.assertEqual(len(args), 1)
 
-    @mock.patch("honeybadger.contrib.starlette.honeybadger")
-    def test_should_reset_context(self, hb):
-        hb.config.insights_enabled = False
+    def test_should_reset_context(self):
+        self.hb.config.insights_enabled = False
         self.client.get("/ok")
-        hb.reset_context.assert_called()
+        self.hb.reset_context.assert_called()
 
-    @mock.patch("honeybadger.contrib.starlette.honeybadger")
-    def test_should_set_event_context_with_request_id(self, hb):
-        hb.config.insights_enabled = False
+    def test_should_set_event_context_with_request_id(self):
+        self.hb.config.insights_enabled = False
         self.client.get("/ok")
-        hb.set_event_context.assert_called_once()
-        call_kwargs = hb.set_event_context.call_args.kwargs
+        self.hb.set_event_context.assert_called_once()
+        call_kwargs = self.hb.set_event_context.call_args.kwargs
         self.assertIn("request_id", call_kwargs)
 
-    @mock.patch("honeybadger.contrib.starlette.honeybadger")
-    def test_should_use_provided_request_id(self, hb):
-        hb.config.insights_enabled = False
+    def test_should_use_provided_request_id(self):
+        self.hb.config.insights_enabled = False
         self.client.get("/ok", headers={"x-request-id": "my-request-id"})
-        hb.set_event_context.assert_called_once()
-        call_kwargs = hb.set_event_context.call_args.kwargs
+        self.hb.set_event_context.assert_called_once()
+        call_kwargs = self.hb.set_event_context.call_args.kwargs
         self.assertEqual(call_kwargs["request_id"], "my-request-id")
 
 
@@ -156,3 +158,83 @@ class StarlettePluginTestCase(unittest.TestCase):
 
         plugin = StarlettePlugin()
         self.assertFalse(plugin.supports(None, {}))
+
+    def test_generate_payload_includes_basic_request_data(self):
+        from honeybadger.contrib.starlette import StarlettePlugin
+
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "scheme": "http",
+            "path": "/ok",
+            "root_path": "",
+            "query_string": b"x=1&x=2",
+            "headers": [
+                (b"host", b"testserver"),
+                (b"user-agent", b"test-client"),
+            ],
+        }
+
+        async def receive():
+            return {"type": "http.request"}
+
+        request = Request(scope, receive)
+
+        plugin = StarlettePlugin()
+        payload = {"request": {}}
+        config = mock.Mock()
+        config.params_filters = []
+        context = {"starlette_request": request}
+
+        plugin.generate_payload(payload, config, context)
+
+        self.assertIn("request", payload)
+        request_payload = payload["request"]
+
+        self.assertEqual(request_payload.get("method"), "GET")
+        self.assertEqual(request_payload.get("path"), "/ok")
+
+        params = request_payload.get("params", {})
+        self.assertIn("x", params)
+        x_value = params["x"]
+        if isinstance(x_value, (list, tuple)):
+            self.assertEqual(list(x_value), ["1", "2"])
+        else:
+            self.assertIn("1", str(x_value))
+            self.assertIn("2", str(x_value))
+
+    def test_generate_payload_filters_sensitive_params(self):
+        from honeybadger.contrib.starlette import StarlettePlugin
+
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "scheme": "http",
+            "path": "/ok",
+            "root_path": "",
+            "query_string": b"password=secret&x=1",
+            "headers": [
+                (b"host", b"testserver"),
+            ],
+        }
+
+        async def receive():
+            return {"type": "http.request"}
+
+        request = Request(scope, receive)
+
+        plugin = StarlettePlugin()
+        payload = {"request": {}}
+        config = mock.Mock()
+        config.params_filters = ["password"]
+        context = {"starlette_request": request}
+
+        plugin.generate_payload(payload, config, context)
+
+        self.assertIn("request", payload)
+        request_payload = payload["request"]
+        params = request_payload.get("params", {})
+
+        if "password" in params:
+            self.assertNotEqual(params["password"], "secret")
+        self.assertIn("x", params)

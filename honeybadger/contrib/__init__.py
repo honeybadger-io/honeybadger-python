@@ -4,7 +4,11 @@ from honeybadger.contrib.aws_lambda import AWSLambdaPlugin
 from honeybadger.contrib.logger import HoneybadgerHandler
 from honeybadger.contrib.asgi import ASGIHoneybadger
 from honeybadger.contrib.celery import CeleryHoneybadger
-from honeybadger.contrib.starlette import StarletteHoneybadger
+
+try:
+    from honeybadger.contrib.starlette import StarletteHoneybadger
+except ImportError:
+    StarletteHoneybadger = None
 
 __all__ = [
     "FlaskHoneybadger",
@@ -13,5 +17,7 @@ __all__ = [
     "HoneybadgerHandler",
     "ASGIHoneybadger",
     "CeleryHoneybadger",
-    "StarletteHoneybadger",
 ]
+
+if StarletteHoneybadger is not None:
+    __all__.append("StarletteHoneybadger")
