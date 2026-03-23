@@ -26,8 +26,6 @@ _current_request: ContextVar[Optional[Request]] = ContextVar(
     "_current_request", default=None
 )
 
-_plugin_registered = False
-
 # CGI-style header keys that carry credentials and should never be sent in
 # error payloads.  Users can still allowlist them via configuration if needed.
 _SENSITIVE_CGI_HEADERS = frozenset(
@@ -74,7 +72,7 @@ class StarlettePlugin(Plugin):
             "action": route_name or request.method,
             "params": filter_dict(params, config.params_filters),
             "cgi_data": filter_dict(filter_env_vars(cgi_data), config.params_filters),
-            "context": context,
+            "context": {k: v for k, v in context.items() if k != "starlette_request"},
             "method": request.method,
             "path": request.url.path,
         }
@@ -106,10 +104,7 @@ class StarletteHoneybadger(BaseHTTPMiddleware):
         if kwargs:
             honeybadger.configure(**kwargs)
 
-        global _plugin_registered
-        if not _plugin_registered:
-            default_plugin_manager.register(StarlettePlugin())
-            _plugin_registered = True
+        default_plugin_manager.register(StarlettePlugin())
 
         super().__init__(app)
 

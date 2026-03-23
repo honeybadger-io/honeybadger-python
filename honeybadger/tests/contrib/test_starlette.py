@@ -7,6 +7,8 @@ from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
+from starlette.exceptions import HTTPException
+
 from honeybadger.contrib.starlette import StarletteHoneybadger
 
 
@@ -22,11 +24,16 @@ def error_route(request: Request) -> PlainTextResponse:
     raise SomeError("Something went wrong")
 
 
+def not_found_route(request: Request) -> PlainTextResponse:
+    raise HTTPException(status_code=404, detail="Not found")
+
+
 def build_app(**kwargs):
     app = Starlette(
         routes=[
             Route("/ok", ok_route, name="ok"),
             Route("/error", error_route, name="error"),
+            Route("/not-found", not_found_route, name="not_found"),
         ],
     )
     app.add_middleware(StarletteHoneybadger, **kwargs)
@@ -53,6 +60,11 @@ class StarletteMiddlewareTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
         self.hb.notify.assert_called_once()
         self.assertEqual(type(self.hb.notify.call_args.kwargs["exception"]), SomeError)
+
+    def test_should_not_notify_on_http_exception(self):
+        response = self.client.get("/not-found")
+        self.assertEqual(response.status_code, 404)
+        self.hb.notify.assert_not_called()
 
     def test_should_begin_request(self):
         self.client.get("/ok")
