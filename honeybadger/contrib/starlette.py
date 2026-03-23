@@ -102,8 +102,7 @@ class StarletteHoneybadger:
         if kwargs:
             honeybadger.configure(**kwargs)
 
-        if "Starlette" not in default_plugin_manager._registered:
-            default_plugin_manager.register(StarlettePlugin())
+        default_plugin_manager.register(StarlettePlugin())
 
         self.app = app
 
