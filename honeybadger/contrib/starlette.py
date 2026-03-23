@@ -14,10 +14,8 @@ from honeybadger.utils import (
 )
 from honeybadger.contrib.asgi import _as_context
 
-from starlette.types import ASGIApp
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from starlette.requests import Request
-from starlette.responses import Response
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.routing import Match
 
 logger = logging.getLogger(__name__)
@@ -97,7 +95,7 @@ def _match_route(request: Request):
     return None, None
 
 
-class StarletteHoneybadger(BaseHTTPMiddleware):
+class StarletteHoneybadger:
     """Starlette middleware for Honeybadger error and event tracking."""
 
     def __init__(self, app: ASGIApp, **kwargs):
@@ -107,12 +105,47 @@ class StarletteHoneybadger(BaseHTTPMiddleware):
         if "Starlette" not in default_plugin_manager._registered:
             default_plugin_manager.register(StarlettePlugin())
 
-        super().__init__(app)
+        self.app = app
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def _finalize_request(self, request: Request, start: float, status_code: int):
+        try:
+            starlette_config = honeybadger.config.insights_config.starlette
+            if honeybadger.config.insights_enabled and not starlette_config.disabled:
+                route_path, route_name = _match_route(request)
+                payload = {
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status": status_code,
+                    "duration": get_duration(start),
+                }
+                if route_path:
+                    payload["route"] = route_path
+                if route_name:
+                    payload["view"] = route_name
+
+                if starlette_config.include_params:
+                    params = {}
+                    for key in request.query_params:
+                        values = request.query_params.getlist(key)
+                        params[key] = values[0] if len(values) == 1 else values
+                    payload["params"] = filter_dict(
+                        params,
+                        honeybadger.config.params_filters,
+                        remove_keys=True,
+                    )
+
+                honeybadger.event("starlette.request", payload)
+        except Exception as e:
+            logger.warning(
+                f"Exception while sending Honeybadger event: {e}", exc_info=True
+            )
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
         start = time.monotonic()
+        request = Request(scope, receive)
         request_id = sanitize_request_id(request.headers.get("x-request-id"))
         if not request_id:
             request_id = str(uuid.uuid4())
@@ -121,16 +154,25 @@ class StarletteHoneybadger(BaseHTTPMiddleware):
         honeybadger.set_event_context(request_id=request_id)
 
         token = _current_request.set(request)
-
         status_code = 500
+        body = bytearray()
+
+        async def receive_wrapper() -> Message:
+            message = await receive()
+            if message["type"] == "http.request":
+                chunk = message.get("body", b"")
+                if chunk:
+                    body.extend(chunk)
+            return message
+
+        async def send_wrapper(message: Message) -> None:
+            nonlocal status_code
+            if message["type"] == "http.response.start":
+                status_code = message["status"]
+            await send(message)
+
         try:
-            # BaseHTTPMiddleware buffers the response body, so call_next
-            # returns after the full response is generated. Duration
-            # measured in the finally block reflects request processing
-            # time but excludes any BackgroundTask execution.
-            response = await call_next(request)
-            status_code = response.status_code
-            return response
+            await self.app(scope, receive_wrapper, send_wrapper)
         except Exception as exc:
             # Skip HTTP exceptions (4xx errors etc.) like FastAPI integration
             try:
@@ -142,49 +184,15 @@ class StarletteHoneybadger(BaseHTTPMiddleware):
             except ImportError:
                 pass
 
-            scope = dict(request.scope)
-            try:
-                body = await request.body()
-                scope["body"] = body
-            except Exception:
-                pass
-            honeybadger.notify(exception=exc, context=_as_context(scope))
+            notify_scope = dict(scope)
+            if body:
+                notify_scope["body"] = bytes(body)
+            honeybadger.notify(exception=exc, context=_as_context(notify_scope))
             raise
         finally:
-            _current_request.reset(token)
             try:
-                starlette_config = honeybadger.config.insights_config.starlette
-                if (
-                    honeybadger.config.insights_enabled
-                    and not starlette_config.disabled
-                ):
-                    route_path, route_name = _match_route(request)
-                    payload = {
-                        "method": request.method,
-                        "path": request.url.path,
-                        "status": status_code,
-                        "duration": get_duration(start),
-                    }
-                    if route_path:
-                        payload["route"] = route_path
-                    if route_name:
-                        payload["view"] = route_name
-
-                    if starlette_config.include_params:
-                        params = {}
-                        for key in request.query_params:
-                            values = request.query_params.getlist(key)
-                            params[key] = values[0] if len(values) == 1 else values
-                        payload["params"] = filter_dict(
-                            params,
-                            honeybadger.config.params_filters,
-                            remove_keys=True,
-                        )
-
-                    honeybadger.event("starlette.request", payload)
+                await self._finalize_request(request, start, status_code)
+            finally:
+                _current_request.reset(token)
                 honeybadger.reset_context()
                 honeybadger.reset_event_context()
-            except Exception as e:
-                logger.warning(
-                    f"Exception while sending Honeybadger event: {e}", exc_info=True
-                )

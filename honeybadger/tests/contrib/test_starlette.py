@@ -2,6 +2,7 @@ import unittest
 import mock
 
 from starlette.applications import Starlette
+from starlette.background import BackgroundTask
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
@@ -28,9 +29,10 @@ def not_found_route(request: Request) -> PlainTextResponse:
     raise HTTPException(status_code=404, detail="Not found")
 
 
-def build_app(**kwargs):
+def build_app(routes=None, **kwargs):
     app = Starlette(
-        routes=[
+        routes=routes
+        or [
             Route("/ok", ok_route, name="ok"),
             Route("/error", error_route, name="error"),
             Route("/not-found", not_found_route, name="not_found"),
@@ -159,6 +161,51 @@ class StarletteInsightsTestCase(unittest.TestCase):
         name, payload = hb.event.call_args.args
         self.assertEqual(payload["route"], "/ok")
         self.assertEqual(payload["view"], "ok")
+
+    @mock.patch("honeybadger.contrib.starlette.honeybadger")
+    def test_sends_request_event_after_background_task(self, hb):
+        hb.config.insights_enabled = True
+        hb.config.insights_config.starlette.disabled = False
+        hb.config.insights_config.starlette.include_params = False
+        hb.config.params_filters = []
+
+        call_order = []
+
+        def background_job():
+            call_order.append("background")
+
+        def route(request: Request) -> PlainTextResponse:
+            return PlainTextResponse("ok", background=BackgroundTask(background_job))
+
+        hb.event.side_effect = lambda *args, **kwargs: call_order.append("event")
+
+        app = build_app(
+            routes=[Route("/with-background", route, name="with_background")],
+            api_key="test-key",
+        )
+        client = TestClient(app, raise_server_exceptions=False)
+
+        response = client.get("/with-background")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(call_order, ["background", "event"])
+
+    @mock.patch("honeybadger.contrib.starlette.honeybadger")
+    def test_resets_context_when_event_send_fails(self, hb):
+        hb.config.insights_enabled = True
+        hb.config.insights_config.starlette.disabled = False
+        hb.config.insights_config.starlette.include_params = False
+        hb.config.params_filters = []
+        hb.event.side_effect = RuntimeError("event failed")
+
+        app = build_app(api_key="test-key")
+        client = TestClient(app, raise_server_exceptions=False)
+
+        response = client.get("/ok")
+
+        self.assertEqual(response.status_code, 200)
+        hb.reset_context.assert_called()
+        hb.reset_event_context.assert_called()
 
 
 class StarlettePluginTestCase(unittest.TestCase):
