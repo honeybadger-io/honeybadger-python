@@ -195,9 +195,7 @@ class StarletteHoneybadger:
                 notify_scope["headers"] = [
                     (k, v)
                     for k, v in raw_headers
-                    if (
-                        "HTTP_" + k.decode("latin-1").upper().replace("-", "_")
-                    )
+                    if ("HTTP_" + k.decode("latin-1").upper().replace("-", "_"))
                     not in _SENSITIVE_CGI_HEADERS
                 ]
             honeybadger.notify(exception=exc, context=_as_context(notify_scope))
