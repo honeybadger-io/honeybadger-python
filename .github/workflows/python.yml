@@ -27,6 +27,9 @@ jobs:
           - FLASK_VERSION=2.3.3
           - FLASK_VERSION=3.0.3
           - FLASK_VERSION=3.1.2
+          - STARLETTE_VERSION=0.36.3
+          - STARLETTE_VERSION=0.41.3
+          - STARLETTE_VERSION=1.0.0
         exclude:
           - python-version: '3.9'
             env: DJANGO_VERSION=5.1.8
@@ -46,6 +49,8 @@ jobs:
             env: DJANGO_VERSION=4.2.28
           - python-version: '3.14'
             env: DJANGO_VERSION=5.1.8
+          - python-version: '3.9'
+            env: STARLETTE_VERSION=1.0.0
           - python-version: '3.14'
             env: FLASK_VERSION=1.1.4
 
