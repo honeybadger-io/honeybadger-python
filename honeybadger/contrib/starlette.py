@@ -155,15 +155,6 @@ class StarletteHoneybadger:
 
         token = _current_request.set(request)
         status_code = 500
-        body = bytearray()
-
-        async def receive_wrapper() -> Message:
-            message = await receive()
-            if message["type"] == "http.request":
-                chunk = message.get("body", b"")
-                if chunk:
-                    body.extend(chunk)
-            return message
 
         async def send_wrapper(message: Message) -> None:
             nonlocal status_code
@@ -172,7 +163,7 @@ class StarletteHoneybadger:
             await send(message)
 
         try:
-            await self.app(scope, receive_wrapper, send_wrapper)
+            await self.app(scope, receive, send_wrapper)
         except Exception as exc:
             # Skip HTTP exceptions (4xx errors etc.) like FastAPI integration
             try:
@@ -185,8 +176,6 @@ class StarletteHoneybadger:
                 pass
 
             notify_scope = dict(scope)
-            if body:
-                notify_scope["body"] = bytes(body)
             # Strip credential-bearing headers before building the
             # error context so they never reach the notice payload.
             if "headers" in notify_scope:
