@@ -111,8 +111,12 @@ class CeleryHoneybadger(object):
             from django.db.backends.utils import CursorWrapper
             from honeybadger.contrib.db import DBHoneybadger
 
+            if getattr(CursorWrapper, "_honeybadger_patched", False):
+                return
+
             orig_exec = CursorWrapper.execute
             CursorWrapper.execute = DBHoneybadger.django_execute(orig_exec)
+            CursorWrapper._honeybadger_patched = True
         except ImportError:
             pass
 
