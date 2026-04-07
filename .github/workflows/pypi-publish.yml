@@ -23,6 +23,7 @@ jobs:
   publish:
     needs: [ test ]
     runs-on: ubuntu-22.04
+    timeout-minutes: 10
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
@@ -32,12 +33,12 @@ jobs:
 
       # The logic below handles Pypi publishing.
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         if: ${{ steps.release.outputs.release_created }}
 
       - name: Setup python
         if: ${{ steps.release.outputs.release_created }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: '3.9'
 
