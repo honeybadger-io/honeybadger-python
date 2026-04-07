@@ -3,6 +3,13 @@ All notable changes to this project will be documented in this file. See [Keep a
 CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
+## [1.2.1](https://github.com/honeybadger-io/honeybadger-python/compare/v1.2.0...v1.2.1) (2026-04-07)
+
+
+### Bug Fixes
+
+* connect django DBHoneybadger in celery worker ([#241](https://github.com/honeybadger-io/honeybadger-python/issues/241)) ([78a59f9](https://github.com/honeybadger-io/honeybadger-python/commit/78a59f9625b4c0e67a9132a9e223cc54567a710b))
+
 ## [1.2.0](https://github.com/honeybadger-io/honeybadger-python/compare/v1.1.3...v1.2.0) (2026-03-11)
 
 
