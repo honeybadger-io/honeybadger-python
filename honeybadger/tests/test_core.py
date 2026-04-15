@@ -132,15 +132,19 @@ def test_exception_hook_passes_traceback(monkeypatch):
     def fake_existing_except_hook(*args, **kwargs):
         pass
 
+    import sys
+
     monkeypatch.setattr(hb, "_send_notice", fake_send)
+    original_hook = sys.excepthook
     hb.wrap_excepthook(fake_existing_except_hook)
 
     try:
         raise ValueError("traceback test")
     except ValueError:
-        import sys
         t, v, tb = sys.exc_info()
         hb.exception_hook(t, v, tb)
+    finally:
+        sys.excepthook = original_hook
 
     notice = captured["notified"]
     assert notice.exc_traceback is not None

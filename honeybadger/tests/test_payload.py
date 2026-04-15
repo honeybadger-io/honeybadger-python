@@ -247,3 +247,19 @@ def test_create_payload_with_correlation_context():
         exception, config=config, correlation_context={"request_id": request_id}
     )
     assert payload["correlation_context"]["request_id"] == request_id
+
+
+def test_create_payload_falls_back_to_exception_traceback():
+    config = Configuration()
+
+    try:
+        raise ValueError("traceback fallback test")
+    except ValueError as e:
+        exc = e
+
+    # Outside except block: sys.exc_info() is empty, exc_traceback is None,
+    # so create_payload should fall back to exc.__traceback__.
+    payload = create_payload(exc, exc_traceback=None, config=config)
+    backtrace = payload["error"]["backtrace"]
+    assert len(backtrace) > 0
+    assert any("test_payload" in frame["file"] for frame in backtrace)
