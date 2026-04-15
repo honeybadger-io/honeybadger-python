@@ -177,7 +177,7 @@ def create_payload(
     if exc_traceback is None and isinstance(exception, BaseException):
         exc_traceback = exception.__traceback__
 
-    # if context is None, Initialize as an emptty dict
+    # if context is None, Initialize as an empty dict
     if not context:
         context = {}
 
