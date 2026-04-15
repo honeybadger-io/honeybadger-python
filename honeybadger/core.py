@@ -63,7 +63,7 @@ class Honeybadger(object):
         sys.excepthook = self.exception_hook
 
     def exception_hook(self, type, exception, exc_traceback):
-        self.notify(exception=exception)
+        self.notify(exception=exception, exc_traceback=exc_traceback)
         self.existing_except_hook(type, exception, exc_traceback)
 
     def shutdown(self):
@@ -77,6 +77,7 @@ class Honeybadger(object):
         context: Optional[Dict[str, Any]] = None,
         fingerprint=None,
         tags: Optional[List[str]] = None,
+        exc_traceback=None,
     ):
         base = error_context.get()
         tag_ctx = base.pop("_tags", [])
@@ -89,6 +90,7 @@ class Honeybadger(object):
             exception=exception,
             error_class=error_class,
             error_message=error_message,
+            exc_traceback=exc_traceback,
             context=merged_ctx,
             fingerprint=fingerprint,
             tags=merged_tags,

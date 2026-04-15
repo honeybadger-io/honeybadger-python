@@ -174,6 +174,9 @@ def create_payload(
     if exc_traceback is None:
         exc_traceback = sys.exc_info()[2]
 
+    if exc_traceback is None and hasattr(exception, '__traceback__'):
+        exc_traceback = exception.__traceback__
+
     # if context is None, Initialize as an emptty dict
     if not context:
         context = {}
