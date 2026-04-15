@@ -252,10 +252,11 @@ def test_create_payload_with_correlation_context():
 def test_create_payload_falls_back_to_exception_traceback():
     config = Configuration()
 
+    exc = ValueError("traceback fallback test")
     try:
-        raise ValueError("traceback fallback test")
-    except ValueError as e:
-        exc = e
+        raise exc
+    except ValueError:
+        pass
 
     # Outside except block: sys.exc_info() is empty, exc_traceback is None,
     # so create_payload should fall back to exc.__traceback__.
