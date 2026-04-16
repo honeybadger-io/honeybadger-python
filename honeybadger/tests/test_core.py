@@ -121,6 +121,36 @@ def test_exception_hook_calls_notify(monkeypatch):
     assert captured["hook"] is True
 
 
+def test_exception_hook_passes_traceback(monkeypatch):
+    hb = Honeybadger()
+    captured = {}
+
+    def fake_send(notice=None, **kwargs):
+        captured["notified"] = notice
+        return "sent"
+
+    def fake_existing_except_hook(*args, **kwargs):
+        pass
+
+    import sys
+
+    monkeypatch.setattr(hb, "_send_notice", fake_send)
+    original_hook = sys.excepthook
+    hb.wrap_excepthook(fake_existing_except_hook)
+
+    try:
+        raise ValueError("traceback test")
+    except ValueError:
+        t, v, tb = sys.exc_info()
+        hb.exception_hook(t, v, tb)
+    finally:
+        sys.excepthook = original_hook
+
+    notice = captured["notified"]
+    assert notice.exc_traceback is not None
+    assert notice.exc_traceback is tb
+
+
 def test_threading():
     hb = Honeybadger()
     hb.configure(api_key="aaa", environment="development")  # Explicitly use development

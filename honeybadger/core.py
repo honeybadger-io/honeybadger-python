@@ -7,6 +7,7 @@ import atexit
 import uuid
 import hashlib
 
+from types import TracebackType
 from typing import Optional, Dict, Any, List
 
 from honeybadger.plugins import default_plugin_manager
@@ -62,8 +63,13 @@ class Honeybadger(object):
         self.existing_except_hook = func
         sys.excepthook = self.exception_hook
 
-    def exception_hook(self, type, exception, exc_traceback):
-        self.notify(exception=exception)
+    def exception_hook(
+        self,
+        type: type[BaseException],
+        exception: BaseException,
+        exc_traceback: Optional[TracebackType],
+    ) -> None:
+        self.notify(exception=exception, exc_traceback=exc_traceback)
         self.existing_except_hook(type, exception, exc_traceback)
 
     def shutdown(self):
@@ -77,6 +83,7 @@ class Honeybadger(object):
         context: Optional[Dict[str, Any]] = None,
         fingerprint=None,
         tags: Optional[List[str]] = None,
+        exc_traceback: Optional[TracebackType] = None,
     ):
         base = error_context.get()
         tag_ctx = base.pop("_tags", [])
@@ -89,6 +96,7 @@ class Honeybadger(object):
             exception=exception,
             error_class=error_class,
             error_message=error_message,
+            exc_traceback=exc_traceback,
             context=merged_ctx,
             fingerprint=fingerprint,
             tags=merged_tags,
