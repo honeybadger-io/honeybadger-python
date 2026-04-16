@@ -3,6 +3,13 @@ All notable changes to this project will be documented in this file. See [Keep a
 CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
+## [1.2.2](https://github.com/honeybadger-io/honeybadger-python/compare/v1.2.1...v1.2.2) (2026-04-16)
+
+
+### Bug Fixes
+
+* pass exc_traceback through exception_hook to payload ([#257](https://github.com/honeybadger-io/honeybadger-python/issues/257)) ([188ec2e](https://github.com/honeybadger-io/honeybadger-python/commit/188ec2e87b73eefe327a0f3892192cd31111f5a1))
+
 ## [1.2.1](https://github.com/honeybadger-io/honeybadger-python/compare/v1.2.0...v1.2.1) (2026-04-07)
 
 
