@@ -1,8 +1,8 @@
 """Honeybadger instrumentation for Oban-py (https://github.com/oban-bg/oban-py).
 
 Reports unhandled worker exceptions to Honeybadger and emits per-job +
-maintenance-loop telemetry to Honeybadger Insights. See the design spec:
-docs/superpowers/specs/2026-05-21-oban-py-instrumentation-design.md
+maintenance-loop telemetry to Honeybadger Insights. See the "Oban (Python)"
+section in the project README for usage and configuration.
 """
 
 import logging
@@ -125,6 +125,17 @@ class ObanHoneybadger:
     def __init__(self, report_exceptions: bool = False):
         self.report_exceptions = report_exceptions
         self._initialized = False
+        # Per-target state, initialized so that cleanup after a partial-init
+        # failure can safely inspect every flag without AttributeError.
+        self._wrapped_classes: list = []
+        self._prev_after_register = None
+        self._after_register_chain_installed = None
+        self._patched_enqueue_many = False
+        self._prev_wrap_result = None
+        self._wrap_result_extension = None
+        self._wrap_result_installed = False
+        self._job_telemetry_attached = False
+        self._loop_telemetry_attached = False
 
     def init(self):
         """Wire up extensions, telemetry, and worker wrappers. Idempotent."""
@@ -139,14 +150,27 @@ class ObanHoneybadger:
             )
         _active_instance = self
 
+        try:
+            self._perform_init()
+        except BaseException:
+            # Partial init: best-effort revert anything we wired up so far,
+            # then clear the single-instance lock so the caller can retry
+            # (or another instance can init) once the underlying issue is fixed.
+            try:
+                self._cleanup_wiring()
+            finally:
+                _active_instance = None
+            raise
+
+        self._initialized = True
+
+    def _perform_init(self):
         # Register the plugin (idempotent — PluginManager keys by name).
         default_plugin_manager.register(ObanPlugin())
 
         # Imported lazily so the module file imports cleanly without oban installed.
         from oban._extensions import get_ext, put_ext
         from oban.worker import _registry
-
-        self._wrapped_classes = []
 
         # Wrap every already-registered worker class.
         for cls in list(_registry.values()):
@@ -224,8 +248,6 @@ class ObanHoneybadger:
         else:
             self._job_telemetry_attached = False
             self._loop_telemetry_attached = False
-
-        self._initialized = True
 
     def _wrap_worker_class(self, cls):
         if getattr(cls, "_honeybadger_process_wrapped", False):
@@ -345,6 +367,11 @@ class ObanHoneybadger:
 
     @staticmethod
     def _is_worker_excluded(worker_name, patterns):
+        if not patterns:
+            # Defensive: dataclasses don't validate field types, so a user who
+            # dict-configures `exclude_workers=None` would otherwise hit a
+            # TypeError on iteration.
+            return False
         for p in patterns:
             if hasattr(p, "search"):
                 if p.search(worker_name):
@@ -356,38 +383,45 @@ class ObanHoneybadger:
     def tearDown(self):
         """Reverse all wiring done by init(). Idempotent."""
         global _active_instance
-        if not self._initialized:
-            return
         if _active_instance is not self:
             return
+        try:
+            self._cleanup_wiring()
+        finally:
+            self._initialized = False
+            _active_instance = None
 
-        from oban._extensions import put_ext
+    def _cleanup_wiring(self):
+        """Best-effort revert of every per-target wiring step.
 
-        # Restore Oban.enqueue_many if we patched it.
-        from oban import Oban
+        Safe to call after a partial init() failure as well as from tearDown().
+        Each step is gated by its own flag so absent state is a no-op.
+        """
+        # Lazy imports: cleanup may run after a failed init where oban itself
+        # wasn't importable, but in that case nothing got wired and every flag
+        # is its initial value, so all per-target blocks below are no-ops and
+        # we never reach the imports.
+        if self._patched_enqueue_many:
+            from oban import Oban
 
-        if getattr(self, "_patched_enqueue_many", False):
             if getattr(Oban.enqueue_many, "_honeybadger_patched", False):
                 Oban.enqueue_many = Oban.enqueue_many._honeybadger_original
             self._patched_enqueue_many = False
 
-        # Detach Insights job-event handler.
-        if getattr(self, "_job_telemetry_attached", False):
+        if self._job_telemetry_attached:
             from oban import telemetry
 
             telemetry.detach("honeybadger-oban-jobs")
             self._job_telemetry_attached = False
 
-        # Detach Insights loop-exception handler.
-        if getattr(self, "_loop_telemetry_attached", False):
+        if self._loop_telemetry_attached:
             from oban import telemetry
 
             telemetry.detach("honeybadger-oban-loops")
             self._loop_telemetry_attached = False
 
-        # Restore executor.wrap_result extension.
-        if getattr(self, "_wrap_result_installed", False):
-            from oban._extensions import get_ext
+        if self._wrap_result_installed:
+            from oban._extensions import get_ext, put_ext
 
             current = get_ext("executor.wrap_result", None)
             if current is self._wrap_result_extension:
@@ -395,12 +429,14 @@ class ObanHoneybadger:
             # else: a later integration replaced our extension; leave it alone.
             self._wrap_result_installed = False
 
-        # Restore worker.after_register to whatever was there before.
-        from oban._extensions import get_ext
+        if self._after_register_chain_installed is not None:
+            from oban._extensions import get_ext, put_ext
 
-        current = get_ext("worker.after_register", None)
-        if current is self._after_register_chain_installed:
-            put_ext("worker.after_register", self._prev_after_register)
+            current = get_ext("worker.after_register", None)
+            if current is self._after_register_chain_installed:
+                put_ext("worker.after_register", self._prev_after_register)
+            self._after_register_chain_installed = None
+            self._prev_after_register = None
 
         # Unwrap every worker class we wrapped.
         for cls in self._wrapped_classes:
@@ -409,6 +445,3 @@ class ObanHoneybadger:
                 del cls._honeybadger_original_process
                 del cls._honeybadger_process_wrapped
         self._wrapped_classes = []
-
-        self._initialized = False
-        _active_instance = None

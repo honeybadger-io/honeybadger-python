@@ -1109,3 +1109,58 @@ def test_after_register_inert_after_teardown_via_chained_extension(reset_oban_re
 
     # If our chain had wrapped LateW, _honeybadger_process_wrapped would be set.
     assert not getattr(LateW, "_honeybadger_process_wrapped", False)
+
+
+def test_is_worker_excluded_handles_none_patterns():
+    """exclude_workers=None (dataclass field is not type-validated) must not crash."""
+    from honeybadger.contrib.oban import ObanHoneybadger
+
+    assert ObanHoneybadger._is_worker_excluded("any.Worker", None) is False
+    assert ObanHoneybadger._is_worker_excluded("any.Worker", []) is False
+
+
+def test_init_failure_releases_active_instance_and_unwinds_partial(reset_oban_registry):
+    """A failure mid-init() must release the single-instance lock and unwind partials."""
+    from oban import Oban, worker
+    from honeybadger import honeybadger as hb_module
+    from honeybadger.config import Configuration
+    from honeybadger.contrib.oban import ObanHoneybadger
+    import honeybadger.contrib.oban as hb_oban
+    import oban.telemetry as oban_telemetry
+
+    @worker(queue="default")
+    class PartialW:
+        async def process(self, job):
+            return None
+
+    original_process = PartialW.process
+    original_enqueue_many = Oban.enqueue_many
+    original_attach = oban_telemetry.attach
+
+    hb_module.configure(insights_enabled=True)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("boom from attach")
+
+    oban_telemetry.attach = boom
+    hb = ObanHoneybadger(report_exceptions=True)
+    try:
+        with pytest.raises(RuntimeError, match="boom from attach"):
+            hb.init()
+
+        # Single-instance lock released, init flag still False.
+        assert hb_oban._active_instance is None
+        assert hb._initialized is False
+
+        # Partial wiring reverted: worker process restored, enqueue_many restored.
+        assert PartialW.process is original_process
+        assert Oban.enqueue_many is original_enqueue_many
+
+        # A fresh init on a new instance must succeed after the prior failure.
+        oban_telemetry.attach = original_attach
+        hb2 = ObanHoneybadger()
+        hb2.init()
+        hb2.tearDown()
+    finally:
+        oban_telemetry.attach = original_attach
+        hb_module.config = Configuration()
