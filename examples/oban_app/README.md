@@ -33,9 +33,6 @@ python -m oban install --dsn "postgresql://oban:oban@localhost:5439/oban_demo"
 HONEYBADGER_API_KEY=hbp_your_real_key_here python app.py
 ```
 
-The default in `app.py` is an obvious placeholder (`hbp_REPLACE_ME_WITH_YOUR_OWN_KEY`)
-and will fail to send to Honeybadger — set the env var to a real project key.
-
 This will:
 
 1. Configure Honeybadger (API key from `HONEYBADGER_API_KEY`) with
