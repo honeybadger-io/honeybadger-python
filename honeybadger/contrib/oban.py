@@ -271,7 +271,11 @@ class ObanHoneybadger:
 
     def _after_register_chain(self, cls):
         # Call the prior extension first (the decorator's default is a no-op).
-        self._prev_after_register(cls)
+        # _prev_after_register may be None after _cleanup_wiring() runs, if a
+        # later integration captured this method via the chain pattern and
+        # keeps calling it post-teardown.
+        if self._prev_after_register is not None:
+            self._prev_after_register(cls)
         if not self._initialized:
             return  # torn down; do not wrap further workers
         self._wrap_worker_class(cls)

@@ -99,18 +99,26 @@ def test_event_context_from_meta_ignores_non_dict_meta():
 
 @pytest.fixture
 def reset_oban_registry():
-    """Clear the worker registry and our active-instance state before each test."""
+    """Clear the worker registry, our active-instance state, and any leaked
+    Honeybadger context before AND after each test. Tests assert on the
+    "no context set" state, which requires defending against pollution from
+    unrelated tests in the same process run.
+    """
     from oban.worker import _registry
     from oban._extensions import _extensions
+    from honeybadger import honeybadger as hb_module
     import honeybadger.contrib.oban as hb_oban
 
-    _registry.clear()
-    _extensions.clear()
-    hb_oban._active_instance = None
+    def _reset():
+        _registry.clear()
+        _extensions.clear()
+        hb_oban._active_instance = None
+        hb_module.reset_context()
+        hb_module.reset_event_context()
+
+    _reset()
     yield
-    _registry.clear()
-    _extensions.clear()
-    hb_oban._active_instance = None
+    _reset()
 
 
 def test_construction_without_init_does_not_register_plugin(reset_oban_registry):
@@ -362,6 +370,7 @@ async def test_wrap_result_reports_exception_for_worker_class(reset_oban_registr
     from oban import worker
     from oban.job import Job
     from oban._executor import Executor
+    from oban.worker import worker_name
     from honeybadger.contrib.oban import ObanHoneybadger
 
     @worker(queue="default")
@@ -372,7 +381,10 @@ async def test_wrap_result_reports_exception_for_worker_class(reset_oban_registr
     hb = ObanHoneybadger(report_exceptions=True)
     hb.init()
     try:
-        job = Job("FailW", args={}, id=1, attempt=1)
+        # Use the fully-qualified registry name so Executor.resolve_worker
+        # can actually import this class instead of failing with
+        # ValueError("Empty module name") on a bare label.
+        job = Job(worker_name(FailW), args={}, id=1, attempt=1)
         with patch("honeybadger.contrib.oban.honeybadger.notify") as notify:
             await Executor(job).execute()
         assert notify.call_count == 1
@@ -414,6 +426,7 @@ async def test_no_notify_when_report_exceptions_false(reset_oban_registry):
     from oban import worker
     from oban.job import Job
     from oban._executor import Executor
+    from oban.worker import worker_name
     from honeybadger.contrib.oban import ObanHoneybadger
 
     @worker(queue="default")
@@ -424,7 +437,7 @@ async def test_no_notify_when_report_exceptions_false(reset_oban_registry):
     hb = ObanHoneybadger(report_exceptions=False)
     hb.init()
     try:
-        job = Job("FailW2", args={}, id=3, attempt=1)
+        job = Job(worker_name(FailW2), args={}, id=3, attempt=1)
         with patch("honeybadger.contrib.oban.honeybadger.notify") as notify:
             await Executor(job).execute()
         assert notify.call_count == 0
@@ -438,6 +451,7 @@ async def test_wrap_result_chains_prior_extension(reset_oban_registry):
     from oban.job import Job
     from oban._executor import Executor
     from oban._extensions import put_ext
+    from oban.worker import worker_name
     from honeybadger.contrib.oban import ObanHoneybadger
 
     prior_calls = []
@@ -456,7 +470,7 @@ async def test_wrap_result_chains_prior_extension(reset_oban_registry):
     hb = ObanHoneybadger(report_exceptions=True)
     hb.init()
     try:
-        job = Job("FailW3", args={}, id=4, attempt=1)
+        job = Job(worker_name(FailW3), args={}, id=4, attempt=1)
         with patch("honeybadger.contrib.oban.honeybadger.notify"):
             await Executor(job).execute()
         assert prior_calls == [(4, "ValueError")]
@@ -470,6 +484,7 @@ async def test_exclude_workers_does_not_filter_errors(reset_oban_registry):
     from oban import worker
     from oban.job import Job
     from oban._executor import Executor
+    from oban.worker import worker_name
     from honeybadger import honeybadger as hb_module
     from honeybadger.contrib.oban import ObanHoneybadger
 
@@ -480,12 +495,12 @@ async def test_exclude_workers_does_not_filter_errors(reset_oban_registry):
 
     # Configure to exclude this worker from Insights.
     hb_module.configure(insights_enabled=True)
-    hb_module.config.insights_config.oban.exclude_workers = ["ExcludedW"]
+    hb_module.config.insights_config.oban.exclude_workers = [worker_name(ExcludedW)]
 
     hb = ObanHoneybadger(report_exceptions=True)
     hb.init()
     try:
-        job = Job("ExcludedW", args={}, id=5, attempt=1)
+        job = Job(worker_name(ExcludedW), args={}, id=5, attempt=1)
         with patch("honeybadger.contrib.oban.honeybadger.notify") as notify:
             await Executor(job).execute()
         # Error path is unaffected by exclude_workers.
@@ -1078,7 +1093,9 @@ async def test_wrap_result_inert_after_teardown_via_chained_extension(
 
     # Run a failing job. Our extension's closure will still be called via the chain,
     # but it must NOT call honeybadger.notify.
-    job = Job("InertW", args={}, id=1, attempt=1)
+    from oban.worker import worker_name
+
+    job = Job(worker_name(InertW), args={}, id=1, attempt=1)
     with patch("honeybadger.contrib.oban.honeybadger.notify") as notify:
         await Executor(job).execute()
     assert notify.call_count == 0
