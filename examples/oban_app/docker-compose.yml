@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: oban-demo-postgres
+    environment:
+      POSTGRES_USER: oban
+      POSTGRES_PASSWORD: oban
+      POSTGRES_DB: oban_demo
+    ports:
+      - "5439:5432"
+    volumes:
+      - oban-demo-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oban -d oban_demo"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+volumes:
+  oban-demo-pgdata:
