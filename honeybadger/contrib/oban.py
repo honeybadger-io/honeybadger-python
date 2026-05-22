@@ -1,8 +1,10 @@
-"""Honeybadger instrumentation for Oban-py (https://github.com/oban-bg/oban-py).
+"""Honeybadger instrumentation for Oban (https://github.com/oban-bg/oban-py).
 
 Reports unhandled worker exceptions to Honeybadger and emits per-job +
-maintenance-loop telemetry to Honeybadger Insights. See the Oban
-section in the project README for usage and configuration.
+maintenance-loop telemetry to Honeybadger Insights.
+
+End-user usage and configuration: see the Oban section in the project README.
+Design and rationale (for maintainers): see oban.md alongside this file.
 """
 
 import logging
@@ -27,7 +29,9 @@ _current_job_var: ContextVar[Optional["Job"]] = ContextVar(
     "honeybadger_oban_current_job", default=None
 )
 
-# Module-level single-instance guard (see decision #12 in the spec).
+# Module-level single-instance guard. Telemetry handler IDs are fixed strings,
+# so two live instances would create duplicate attachments and double-fire every
+# Insights event. See "Single-instance guard" in oban.md.
 _active_instance: Optional["ObanHoneybadger"] = None
 
 _LOOP_EXCEPTION_EVENTS = (
@@ -113,7 +117,7 @@ class ObanPlugin(Plugin):
 
 
 class ObanHoneybadger:
-    """Wires Honeybadger into Oban-py.
+    """Wires Honeybadger into Oban.
 
     Usage:
 
@@ -140,7 +144,7 @@ class ObanHoneybadger:
     def init(self):
         """Wire up extensions, telemetry, and worker wrappers. Idempotent."""
         if self._initialized:
-            return  # same-instance early return; see spec decision #12
+            return  # same-instance early return; see oban.md
 
         global _active_instance
         if _active_instance is not None and _active_instance is not self:
