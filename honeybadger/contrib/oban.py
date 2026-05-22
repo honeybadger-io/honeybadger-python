@@ -1,7 +1,7 @@
 """Honeybadger instrumentation for Oban-py (https://github.com/oban-bg/oban-py).
 
 Reports unhandled worker exceptions to Honeybadger and emits per-job +
-maintenance-loop telemetry to Honeybadger Insights. See the "Oban (Python)"
+maintenance-loop telemetry to Honeybadger Insights. See the Oban
 section in the project README for usage and configuration.
 """
 
