@@ -37,9 +37,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname
 logging.getLogger("honeybadger").setLevel(logging.DEBUG)
 logging.getLogger("oban").setLevel(logging.INFO)
 
-# Demo Honeybadger project. Replace with your own to point telemetry elsewhere,
-# or set HONEYBADGER_API_KEY to override.
-API_KEY = os.environ.get("HONEYBADGER_API_KEY", "hbp_sNc9oqQlVDO0TVCngW7EBlVwHv2HIZ3bgllO")
+# Set HONEYBADGER_API_KEY in your shell before running this script.
+# The fallback below is an obvious placeholder, not a real key.
+API_KEY = os.environ.get("HONEYBADGER_API_KEY", "hbp_REPLACE_ME_WITH_YOUR_OWN_KEY")
 
 DSN = os.environ.get("OBAN_DSN", "postgresql://oban:oban@localhost:5439/oban_demo")
 

@@ -30,13 +30,16 @@ python -m oban install --dsn "postgresql://oban:oban@localhost:5439/oban_demo"
 ## Run
 
 ```sh
-python app.py
+HONEYBADGER_API_KEY=hbp_your_real_key_here python app.py
 ```
+
+The default in `app.py` is an obvious placeholder (`hbp_REPLACE_ME_WITH_YOUR_OWN_KEY`)
+and will fail to send to Honeybadger — set the env var to a real project key.
 
 This will:
 
-1. Configure Honeybadger (API key inlined as a demo; override with
-   `HONEYBADGER_API_KEY`) with `insights_enabled=True`.
+1. Configure Honeybadger (API key from `HONEYBADGER_API_KEY`) with
+   `insights_enabled=True`.
 2. Init `ObanHoneybadger(report_exceptions=True)`.
 3. Start Oban with a `default` and `reports` queue.
 4. Enqueue a mix of:
