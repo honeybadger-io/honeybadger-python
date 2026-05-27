@@ -21,7 +21,18 @@ MAX_CAUSE_DEPTH = 15
 
 def error_payload(exception, exc_traceback, config, fingerprint=None, tags=None):
     def _filename(name):
-        return name.replace(config.project_root, "[PROJECT_ROOT]")
+        root = config.project_root
+        if not root:
+            return name
+        normalized_root = root.rstrip(os.sep)
+        # Guard against a root that is empty after stripping (e.g. "/")
+        if not normalized_root:
+            return name
+        if name == normalized_root:
+            return "[PROJECT_ROOT]"
+        if name.startswith(normalized_root + os.sep):
+            return "[PROJECT_ROOT]" + name[len(normalized_root) :]
+        return name
 
     def is_not_honeybadger_frame(frame):
         # TODO: is there a better way to do this?
