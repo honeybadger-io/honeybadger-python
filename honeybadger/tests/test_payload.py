@@ -93,6 +93,26 @@ def test_error_payload_project_root_trailing_separator():
         assert payload["backtrace"][0]["file"] == "[PROJECT_ROOT]/foo.py"
 
 
+def test_error_payload_project_root_windows_alt_separator(monkeypatch):
+    # Simulate Windows: os.sep is "\\", os.altsep is "/". A root configured
+    # with forward slashes should still match a backslash-style filename
+    # (and vice versa).
+    monkeypatch.setattr(os, "sep", "\\")
+    monkeypatch.setattr(os, "altsep", "/")
+    with patch("traceback.extract_stack") as traceback_mock:
+        traceback_mock.return_value = [
+            ("C:\\app\\foo.py", 1, "method_1"),
+            ("C:/app/bar.py", 2, "method_2"),
+        ]
+        config = Configuration(project_root="C:/app/")
+        payload = error_payload(
+            dict(error_class="Exception", error_message="Test"), None, config
+        )
+
+        assert payload["backtrace"][0]["file"] == "[PROJECT_ROOT]\\bar.py"
+        assert payload["backtrace"][1]["file"] == "[PROJECT_ROOT]\\foo.py"
+
+
 def test_error_payload_source_line_top_of_file():
     with mock_traceback(line_no=1) as traceback_mock:
         config = Configuration()
