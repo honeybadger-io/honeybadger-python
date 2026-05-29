@@ -3,6 +3,13 @@ All notable changes to this project will be documented in this file. See [Keep a
 CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
+## [1.2.3](https://github.com/honeybadger-io/honeybadger-python/compare/v1.2.2...v1.2.3) (2026-05-29)
+
+
+### Bug Fixes
+
+* project_root="/" mangling backtrace file paths ([#262](https://github.com/honeybadger-io/honeybadger-python/issues/262)) ([bd7caa0](https://github.com/honeybadger-io/honeybadger-python/commit/bd7caa07d8b4fb1421046f88a119d6b99053bbd7))
+
 ## [1.2.2](https://github.com/honeybadger-io/honeybadger-python/compare/v1.2.1...v1.2.2) (2026-04-16)
 
 
