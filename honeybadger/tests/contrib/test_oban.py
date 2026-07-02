@@ -667,6 +667,64 @@ async def test_exclude_workers_filters_insights_events(
 
 
 @pytest.mark.asyncio
+async def test_job_event_skipped_when_insights_disabled_at_runtime(
+    reset_oban_registry, with_insights
+):
+    """Config is mutable: flipping oban.disabled after init() must stop events
+    even though the telemetry handler is still attached."""
+    from oban import worker, telemetry
+    from oban.job import Job
+    from honeybadger import honeybadger as hb_module
+    from honeybadger.contrib.oban import ObanHoneybadger
+
+    @worker(queue="default")
+    class RuntimeOffW:
+        async def process(self, job):
+            return None
+
+    hb = ObanHoneybadger()
+    hb.init()
+    try:
+        # Disable AFTER init (handler is already attached).
+        hb_module.config.insights_config.oban.disabled = True
+
+        job = Job(
+            "RuntimeOffW",
+            args={},
+            id=99,
+            queue="default",
+            attempt=1,
+            max_attempts=5,
+            meta={},
+            tags=[],
+        )
+        with patch("honeybadger.contrib.oban.honeybadger.event") as event:
+            telemetry.execute(
+                "oban.job.stop",
+                {
+                    "job": job,
+                    "state": "completed",
+                    "duration": 0,
+                    "queue_time": 0,
+                    "monotonic_time": 0,
+                },
+            )
+            telemetry.execute(
+                "oban.scheduler.evaluate.exception",
+                {
+                    "monotonic_time": 0,
+                    "duration": 0,
+                    "error_type": "E",
+                    "error_message": "m",
+                    "traceback": "t",
+                },
+            )
+        assert event.call_count == 0
+    finally:
+        hb.tearDown()
+
+
+@pytest.mark.asyncio
 async def test_include_args_filters_sensitive_keys(reset_oban_registry, with_insights):
     from oban import worker, telemetry
     from oban.job import Job

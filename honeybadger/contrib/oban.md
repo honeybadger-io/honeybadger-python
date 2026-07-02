@@ -76,7 +76,7 @@ Mirrors `CeleryConfig.exclude_tasks`. Errors are independent of Insights configu
 
 | Field | Default | Effect |
 |---|---|---|
-| `disabled` | `False` | When `True`, skip all telemetry attachments at `init()`. |
+| `disabled` | `False` | When `True`, skip all telemetry attachments at `init()`. Also re-checked at emit time (alongside `insights_enabled`) so flipping it after `init()` stops events without a `tearDown()`. |
 | `exclude_workers` | `[]` | List of strings or compiled regex; matched against `job.worker` (fully-qualified `module.Class`). Filters Insights events only. |
 | `include_args` | `False` | When `True`, include filtered `job.args` and `job.meta` in `oban.job_finished` events. |
 

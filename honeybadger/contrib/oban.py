@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Optional
 
 from honeybadger import honeybadger
 from honeybadger.plugins import Plugin, default_plugin_manager
+from honeybadger.utils import filter_dict
 
 if TYPE_CHECKING:
     from oban.job import Job  # type: ignore[import-not-found]
@@ -93,8 +94,6 @@ class ObanPlugin(Plugin):
 
         # Filter sensitive keys (e.g. password) before including in the notice
         # payload. Deep-copy first because filter_dict mutates nested dicts in place.
-        from honeybadger.utils import filter_dict
-
         params_filters = honeybadger.config.params_filters
 
         def _filter(value):
@@ -313,7 +312,8 @@ class ObanHoneybadger:
 
     def _on_job_event(self, name, meta):
         try:
-            from honeybadger.utils import filter_dict
+            if not self._insights_active():
+                return
 
             job = meta["job"]
             oban_cfg = honeybadger.config.insights_config.oban
@@ -355,6 +355,9 @@ class ObanHoneybadger:
 
     def _on_loop_exception(self, name, meta):
         try:
+            if not self._insights_active():
+                return
+
             # name == "oban.<loop>.<action>.exception"
             parts = name.split(".")
             if len(parts) < 4:
@@ -372,6 +375,14 @@ class ObanHoneybadger:
             )
         except Exception:
             logger.exception("Failed to emit Oban loop-exception event for %s", name)
+
+    @staticmethod
+    def _insights_active():
+        # Re-check at emit time, not just at attach time: config is mutable, so
+        # a user can flip insights_enabled or oban.disabled after init() without
+        # tearing down. Guards both telemetry handlers.
+        config = honeybadger.config
+        return config.insights_enabled and not config.insights_config.oban.disabled
 
     @staticmethod
     def _is_worker_excluded(worker_name, patterns):
