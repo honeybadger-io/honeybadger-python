@@ -35,7 +35,7 @@ class EventsWorker:
         self._batches: Deque[Tuple[List[Event], int]] = deque()
 
         self._throttled = False
-        self._stop = False
+        self._stop_event = threading.Event()
         self._dropped = 0
         self._last_drop_log = time.monotonic()
         self._start_time = time.monotonic()
@@ -54,7 +54,7 @@ class EventsWorker:
             self.shutdown()
 
         # Reset state
-        self._stop = False
+        self._stop_event.clear()
 
         self._thread = threading.Thread(
             target=self._run,
@@ -82,7 +82,7 @@ class EventsWorker:
 
     def shutdown(self) -> None:
         self.log.debug("Shutting down events worker")
-        self._stop = True
+        self._stop_event.set()
         self._batch_ready_event.set()  # Wake up the worker thread
 
         if self._thread.is_alive():
@@ -118,7 +118,11 @@ class EventsWorker:
 
                 # Check if we should exit (need consistent view of state)
                 with self._lock:
-                    if self._stop and not self._queue and not self._batches:
+                    if (
+                        self._stop_event.is_set()
+                        and not self._queue
+                        and not self._batches
+                    ):
                         break
 
                 # Perform send/retry logic
@@ -128,9 +132,12 @@ class EventsWorker:
                 # not kill the worker thread — that would silently drop every
                 # future event. Log, then keep the loop alive.
                 self.log.exception("Unexpected error in events worker loop")
-                if self._stop:
+                if self._stop_event.is_set():
                     break
-                time.sleep(1.0)  # avoid a hot loop if the error is persistent
+                # Back off to avoid a hot loop on persistent errors, but wait
+                # on the stop event so shutdown() wakes us immediately instead
+                # of returning while we're still asleep.
+                self._stop_event.wait(1.0)
 
     def _flush(self) -> None:
         """

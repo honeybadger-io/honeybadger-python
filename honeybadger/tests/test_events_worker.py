@@ -319,6 +319,25 @@ def test_send_remaining_on_shutdown(base_config):
     assert conn.batches[-1] == [{"id": 1}, {"id": 2}]
 
 
+def test_shutdown_interrupts_error_backoff(base_config):
+    """shutdown() must wake the worker out of its error backoff and only
+    report stopped once the thread has actually exited — not return while
+    the worker is still sleeping."""
+    cfg = SimpleNamespace(**vars(base_config))
+    cfg.events_timeout = "not-a-number"  # worker loop errors -> backoff path
+    conn = DummyConnection()
+    w = EventsWorker(connection=conn, config=cfg)
+    time.sleep(0.05)  # let the worker enter its error backoff
+    cfg.events_timeout = 0.1  # sane join timeout for shutdown
+
+    start = time.monotonic()
+    w.shutdown()
+    elapsed = time.monotonic() - start
+
+    assert not w._thread.is_alive(), "shutdown returned with worker still alive"
+    assert elapsed < 0.5, f"shutdown blocked {elapsed:.2f}s on error backoff"
+
+
 def test_worker_survives_bad_timeout_config(base_config):
     """A misconfigured (non-numeric) timeout must not kill the worker thread:
     events pushed after the error must still be delivered once the config is
