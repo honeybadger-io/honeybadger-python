@@ -370,6 +370,19 @@ def test_shutdown_with_still_invalid_timeout_config(base_config):
     assert not w._thread.is_alive()
 
 
+def test_shutdown_with_both_timing_configs_invalid(base_config):
+    """With both timing values non-numeric, max(str, str) * 2 is a string —
+    the join timeout must be coerced to a number before calling join()."""
+    cfg = SimpleNamespace(**vars(base_config))
+    cfg.events_timeout = "not-a-number"
+    cfg.events_throttle_wait = "also-bad"
+    conn = DummyConnection()
+    w = EventsWorker(connection=conn, config=cfg)
+    time.sleep(0.05)  # let the worker enter its error backoff
+    w.shutdown()  # must not raise
+    assert not w._thread.is_alive()
+
+
 def test_worker_survives_bad_timeout_config(base_config):
     """A misconfigured (non-numeric) timeout must not kill the worker thread:
     events pushed after the error must still be delivered once the config is

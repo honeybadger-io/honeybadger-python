@@ -87,14 +87,17 @@ class EventsWorker:
 
         if self._thread.is_alive():
             try:
+                # Coerce to float so the result is always numeric — with two
+                # string values, max(str, str) * 2 would "succeed" and hand
+                # join() a string.
                 timeout = (
                     max(
-                        self.config.events_timeout,
-                        self.config.events_throttle_wait,
+                        float(self.config.events_timeout),
+                        float(self.config.events_throttle_wait),
                     )
                     * 2
                 )
-            except TypeError:
+            except (TypeError, ValueError):
                 # Config values may be invalid (e.g. untypecast env vars) —
                 # the worker exits promptly on such errors once stopped, so a
                 # modest fallback join timeout is enough.
