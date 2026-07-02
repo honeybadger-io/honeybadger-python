@@ -317,3 +317,25 @@ def test_send_remaining_on_shutdown(base_config):
         w.push(e)
     w.shutdown()
     assert conn.batches[-1] == [{"id": 1}, {"id": 2}]
+
+
+def test_worker_survives_bad_timeout_config(base_config):
+    """A misconfigured (non-numeric) timeout must not kill the worker thread:
+    events pushed after the error must still be delivered once the config is
+    corrected."""
+    cfg = SimpleNamespace(**vars(base_config))
+    cfg.events_timeout = "not-a-number"  # e.g. an untypecast env var
+    conn = DummyConnection()
+    w = EventsWorker(connection=conn, config=cfg)
+    try:
+        time.sleep(0.1)  # give the loop a chance to hit the bad timeout
+        assert w._thread.is_alive(), "worker thread died on bad timeout config"
+
+        cfg.events_timeout = 0.1  # operator fixes the config
+        for e in ({"id": 1}, {"id": 2}, {"id": 3}):  # batch size reached
+            w.push(e)
+        assert wait_for(lambda: len(conn.batches) >= 1, timeout=3.0)
+        assert conn.batches[0] == [{"id": 1}, {"id": 2}, {"id": 3}]
+    finally:
+        cfg.events_timeout = 0.1
+        w.shutdown()

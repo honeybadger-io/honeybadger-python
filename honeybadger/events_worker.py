@@ -111,17 +111,26 @@ class EventsWorker:
         Main loop: wait until stop or enough events to batch, then flush.
         """
         while True:
-            # Wait for batch ready signal or timeout
-            self._batch_ready_event.wait(timeout=self._compute_timeout())
-            self._batch_ready_event.clear()
+            try:
+                # Wait for batch ready signal or timeout
+                self._batch_ready_event.wait(timeout=self._compute_timeout())
+                self._batch_ready_event.clear()
 
-            # Check if we should exit (need consistent view of state)
-            with self._lock:
-                if self._stop and not self._queue and not self._batches:
+                # Check if we should exit (need consistent view of state)
+                with self._lock:
+                    if self._stop and not self._queue and not self._batches:
+                        break
+
+                # Perform send/retry logic
+                self._flush()
+            except Exception:
+                # An unexpected error (e.g. a misconfigured timeout value) must
+                # not kill the worker thread — that would silently drop every
+                # future event. Log, then keep the loop alive.
+                self.log.exception("Unexpected error in events worker loop")
+                if self._stop:
                     break
-
-            # Perform send/retry logic
-            self._flush()
+                time.sleep(1.0)  # avoid a hot loop if the error is persistent
 
     def _flush(self) -> None:
         """

@@ -37,6 +37,27 @@ def test_config_bool_types_are_accurate():
     assert c.force_report_data == True
 
 
+def test_config_float_types_are_accurate():
+    os.environ["HONEYBADGER_EVENTS_TIMEOUT"] = "2.5"
+    os.environ["HONEYBADGER_EVENTS_THROTTLE_WAIT"] = "30"
+    try:
+        c = Configuration()
+    finally:
+        del os.environ["HONEYBADGER_EVENTS_TIMEOUT"]
+        del os.environ["HONEYBADGER_EVENTS_THROTTLE_WAIT"]
+    assert c.events_timeout == 2.5
+    assert c.events_throttle_wait == 30.0
+
+
+def test_config_invalid_float_env_var_keeps_default():
+    os.environ["HONEYBADGER_EVENTS_TIMEOUT"] = "not-a-number"
+    try:
+        c = Configuration()
+    finally:
+        del os.environ["HONEYBADGER_EVENTS_TIMEOUT"]
+    assert c.events_timeout == 5.0
+
+
 def test_can_only_set_valid_options(caplog):
     with caplog.at_level(logging.WARNING):
         try:
