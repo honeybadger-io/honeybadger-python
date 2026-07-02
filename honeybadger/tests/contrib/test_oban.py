@@ -58,7 +58,63 @@ def test_plugin_generate_payload_enriches_with_job_fields():
     assert request["context"]["queue"] == "mailers"
     assert request["context"]["attempt"] == 2
     assert request["context"]["max_attempts"] == 5
-    assert request["context"]["tags"] == ["email", "transactional"]
+    # Tags must flow through error.tags (real fault tags), never context["tags"]:
+    # the server treats that context key as a comma-separated string and
+    # stringifies lists into junk tags like "[]".
+    assert "tags" not in request["context"]
+    assert payload["error"]["tags"] == ["email", "transactional"]
+
+
+def test_plugin_generate_payload_merges_job_tags_into_existing_error_tags():
+    from honeybadger.contrib.oban import ObanPlugin, _current_job_var
+    from unittest.mock import MagicMock
+
+    job = MagicMock()
+    job.id = 1
+    job.worker = "MyW"
+    job.queue = "default"
+    job.attempt = 1
+    job.max_attempts = 5
+    job.args = {}
+    job.meta = {}
+    job.tags = ["email", "urgent"]
+
+    token = _current_job_var.set(job)
+    try:
+        plugin = ObanPlugin()
+        payload = plugin.generate_payload(
+            {"request": {}, "error": {"tags": ["urgent"]}}, {}, {}
+        )
+    finally:
+        _current_job_var.reset(token)
+
+    # notify()-provided tags are kept; job tags appended without duplicates.
+    assert payload["error"]["tags"] == ["urgent", "email"]
+
+
+def test_plugin_generate_payload_omits_tags_when_job_has_none():
+    from honeybadger.contrib.oban import ObanPlugin, _current_job_var
+    from unittest.mock import MagicMock
+
+    job = MagicMock()
+    job.id = 1
+    job.worker = "MyW"
+    job.queue = "default"
+    job.attempt = 1
+    job.max_attempts = 5
+    job.args = {}
+    job.meta = {}
+    job.tags = []
+
+    token = _current_job_var.set(job)
+    try:
+        plugin = ObanPlugin()
+        payload = plugin.generate_payload({"request": {}}, {}, {})
+    finally:
+        _current_job_var.reset(token)
+
+    assert "tags" not in payload["request"]["context"]
+    assert "error" not in payload  # nothing injected for tagless jobs
 
 
 def test_event_context_from_meta_is_noop_when_no_context():

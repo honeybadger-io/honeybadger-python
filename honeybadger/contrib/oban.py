@@ -99,8 +99,17 @@ class ObanPlugin(Plugin):
             queue=job.queue,
             attempt=job.attempt,
             max_attempts=job.max_attempts,
-            tags=job.tags,
         )
+
+        # Job tags become fault tags via the real tags channel (error.tags).
+        # Never put them in context: the server treats context["tags"] as a
+        # reserved key holding a comma-separated string, and stringifies a
+        # list into junk tags like "[]" or '["alpha"'.
+        if job.tags:
+            error_tags = default_payload.setdefault("error", {}).setdefault("tags", [])
+            error_tags.extend(
+                t for t in job.tags if isinstance(t, str) and t not in error_tags
+            )
 
         params_filters = honeybadger.config.params_filters
         default_payload["request"].update(
