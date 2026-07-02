@@ -86,13 +86,19 @@ class EventsWorker:
         self._batch_ready_event.set()  # Wake up the worker thread
 
         if self._thread.is_alive():
-            timeout = (
-                max(
-                    self.config.events_timeout,
-                    self.config.events_throttle_wait,
+            try:
+                timeout = (
+                    max(
+                        self.config.events_timeout,
+                        self.config.events_throttle_wait,
+                    )
+                    * 2
                 )
-                * 2
-            )
+            except TypeError:
+                # Config values may be invalid (e.g. untypecast env vars) —
+                # the worker exits promptly on such errors once stopped, so a
+                # modest fallback join timeout is enough.
+                timeout = 10.0
             self._thread.join(timeout)
         self.log.debug("Events worker stopped")
 

@@ -358,6 +358,18 @@ def test_shutdown_interrupts_error_backoff(base_config):
     assert elapsed < 0.5, f"shutdown blocked {elapsed:.2f}s on error backoff"
 
 
+def test_shutdown_with_still_invalid_timeout_config(base_config):
+    """shutdown() must not crash computing its join timeout when the config
+    is still invalid at shutdown time."""
+    cfg = SimpleNamespace(**vars(base_config))
+    cfg.events_timeout = "not-a-number"
+    conn = DummyConnection()
+    w = EventsWorker(connection=conn, config=cfg)
+    time.sleep(0.05)  # let the worker enter its error backoff
+    w.shutdown()  # must not raise
+    assert not w._thread.is_alive()
+
+
 def test_worker_survives_bad_timeout_config(base_config):
     """A misconfigured (non-numeric) timeout must not kill the worker thread:
     events pushed after the error must still be delivered once the config is
