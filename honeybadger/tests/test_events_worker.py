@@ -319,6 +319,26 @@ def test_send_remaining_on_shutdown(base_config):
     assert conn.batches[-1] == [{"id": 1}, {"id": 2}]
 
 
+def test_shutdown_returns_promptly_after_drain(base_config):
+    """Once shutdown() drains the queue, the worker must exit immediately —
+    not block in another wait(events_timeout) before noticing it's done."""
+    cfg = SimpleNamespace(**vars(base_config))
+    cfg.events_batch_size = 100
+    cfg.events_timeout = 1.0
+    conn = DummyConnection()
+    w = EventsWorker(connection=conn, config=cfg)
+    for e in ({"id": 1}, {"id": 2}):
+        w.push(e)
+
+    start = time.monotonic()
+    w.shutdown()
+    elapsed = time.monotonic() - start
+
+    assert conn.batches[-1] == [{"id": 1}, {"id": 2}]
+    assert not w._thread.is_alive()
+    assert elapsed < 0.5, f"shutdown took {elapsed:.2f}s after events were drained"
+
+
 def test_shutdown_interrupts_error_backoff(base_config):
     """shutdown() must wake the worker out of its error backoff and only
     report stopped once the thread has actually exited — not return while

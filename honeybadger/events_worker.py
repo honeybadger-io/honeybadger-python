@@ -116,7 +116,12 @@ class EventsWorker:
                 self._batch_ready_event.wait(timeout=self._compute_timeout())
                 self._batch_ready_event.clear()
 
-                # Check if we should exit (need consistent view of state)
+                # Perform send/retry logic
+                self._flush()
+
+                # Check if we should exit — after flushing, so a drained
+                # shutdown breaks now instead of blocking in one more wait()
+                # (need consistent view of state)
                 with self._lock:
                     if (
                         self._stop_event.is_set()
@@ -124,9 +129,6 @@ class EventsWorker:
                         and not self._batches
                     ):
                         break
-
-                # Perform send/retry logic
-                self._flush()
             except Exception:
                 # An unexpected error (e.g. a misconfigured timeout value) must
                 # not kill the worker thread — that would silently drop every
