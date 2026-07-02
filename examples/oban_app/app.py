@@ -109,10 +109,7 @@ async def main():
     finally:
         await pool.close()
         # Drain pending Honeybadger events before exit.
-        try:
-            honeybadger.events_worker.stop()
-        except Exception:
-            pass
+        honeybadger.shutdown()
 
 
 if __name__ == "__main__":

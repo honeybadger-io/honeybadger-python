@@ -876,7 +876,8 @@ async def test_all_loop_exception_events_are_attached(
         ("oban.refresher.refresh.exception", "refresher"),
         ("oban.refresher.cleanup.exception", "refresher"),
         ("oban.scheduler.evaluate.exception", "scheduler"),
-        ("oban.producer.fetch.exception", "producer"),
+        ("oban.producer.get.exception", "producer"),
+        ("oban.producer.ack.exception", "producer"),
     ]
 
     hb = ObanHoneybadger()
@@ -901,6 +902,35 @@ async def test_all_loop_exception_events_are_attached(
             assert payload["event"] == evt_name
     finally:
         hb.tearDown()
+
+
+def test_loop_exception_events_exist_in_oban():
+    """Every subscribed loop event must match a telemetry.span prefix that the
+    installed oban version actually emits — guards against subscribing to
+    renamed or nonexistent events (which fail silently)."""
+    import inspect
+    import os
+    import re
+
+    import oban as oban_pkg
+    from honeybadger.contrib.oban import _LOOP_EXCEPTION_EVENTS
+
+    src_dir = os.path.dirname(inspect.getfile(oban_pkg))
+    span_prefixes = set()
+    for fname in os.listdir(src_dir):
+        if fname.endswith(".py"):
+            with open(os.path.join(src_dir, fname)) as f:
+                span_prefixes.update(
+                    re.findall(r'telemetry\.span\(\s*"([^"]+)"', f.read())
+                )
+
+    assert span_prefixes, "found no telemetry.span calls in oban source"
+    for evt in _LOOP_EXCEPTION_EVENTS:
+        prefix = evt.rsplit(".", 1)[0]  # strip trailing ".exception"
+        assert prefix in span_prefixes, (
+            f"{evt} does not match any telemetry.span prefix in oban "
+            f"{getattr(oban_pkg, '__version__', '?')}: {sorted(span_prefixes)}"
+        )
 
 
 def test_second_instance_init_raises(reset_oban_registry):

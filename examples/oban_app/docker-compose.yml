@@ -9,7 +9,9 @@ services:
     ports:
       - "5439:5432"
     volumes:
-      - oban-demo-pgdata:/var/lib/postgresql/data
+      # postgres:18+ keeps PGDATA in a versioned subdirectory; mount the parent
+      # (mounting /var/lib/postgresql/data makes the container refuse to start).
+      - oban-demo-pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U oban -d oban_demo"]
       interval: 2s

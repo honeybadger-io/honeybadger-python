@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Optional
 
 from honeybadger import honeybadger
 from honeybadger.plugins import Plugin, default_plugin_manager
-from honeybadger.utils import filter_dict
+from honeybadger.utils import filter_dict, matches_any_pattern
 
 if TYPE_CHECKING:
     from oban.job import Job  # type: ignore[import-not-found]
@@ -43,8 +43,18 @@ _LOOP_EXCEPTION_EVENTS = (
     "oban.refresher.refresh.exception",
     "oban.refresher.cleanup.exception",
     "oban.scheduler.evaluate.exception",
-    "oban.producer.fetch.exception",
+    "oban.producer.get.exception",
+    "oban.producer.ack.exception",
 )
+
+
+def _filtered_copy(value, params_filters):
+    """Filter sensitive keys (e.g. password) out of a dict before including it
+    in a notice or event. Deep-copies first because filter_dict mutates nested
+    dicts in place; non-dict values pass through unchanged."""
+    if isinstance(value, dict):
+        return filter_dict(deepcopy(value), params_filters, remove_keys=True)
+    return value
 
 
 @contextmanager
@@ -92,22 +102,14 @@ class ObanPlugin(Plugin):
             tags=job.tags,
         )
 
-        # Filter sensitive keys (e.g. password) before including in the notice
-        # payload. Deep-copy first because filter_dict mutates nested dicts in place.
         params_filters = honeybadger.config.params_filters
-
-        def _filter(value):
-            if isinstance(value, dict):
-                return filter_dict(deepcopy(value), params_filters, remove_keys=True)
-            return value
-
         default_payload["request"].update(
             {
                 "component": module,
                 "action": worker_name,
                 "params": {
-                    "args": _filter(job.args),
-                    "meta": _filter(job.meta),
+                    "args": _filtered_copy(job.args, params_filters),
+                    "meta": _filtered_copy(job.meta, params_filters),
                 },
                 "context": merged_context,
             }
@@ -337,15 +339,10 @@ class ObanHoneybadger:
                 payload["error_message"] = meta.get("error_message")
 
             if oban_cfg.include_args:
-                payload["args"] = filter_dict(
-                    deepcopy(job.args) if isinstance(job.args, dict) else job.args,
-                    honeybadger.config.params_filters,
-                    remove_keys=True,
-                )
-                payload["meta"] = filter_dict(
-                    deepcopy(job.meta) if isinstance(job.meta, dict) else {},
-                    honeybadger.config.params_filters,
-                    remove_keys=True,
+                params_filters = honeybadger.config.params_filters
+                payload["args"] = _filtered_copy(job.args, params_filters)
+                payload["meta"] = _filtered_copy(
+                    job.meta if isinstance(job.meta, dict) else {}, params_filters
                 )
 
             with _event_context_from_meta(job):
@@ -386,18 +383,7 @@ class ObanHoneybadger:
 
     @staticmethod
     def _is_worker_excluded(worker_name, patterns):
-        if not patterns:
-            # Defensive: dataclasses don't validate field types, so a user who
-            # dict-configures `exclude_workers=None` would otherwise hit a
-            # TypeError on iteration.
-            return False
-        for p in patterns:
-            if hasattr(p, "search"):
-                if p.search(worker_name):
-                    return True
-            elif p == worker_name:
-                return True
-        return False
+        return matches_any_pattern(worker_name, patterns)
 
     def tearDown(self):
         """Reverse all wiring done by init(). Idempotent."""
