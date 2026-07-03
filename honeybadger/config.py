@@ -140,6 +140,8 @@ class Configuration(BaseConfig):
                         val = env_val.split(",")
                     elif typ == int:
                         val = int(env_val)
+                    elif typ == float:
+                        val = float(env_val)
                     elif typ == bool:
                         val = env_val.lower() in ("true", "1", "yes")
                     else:
