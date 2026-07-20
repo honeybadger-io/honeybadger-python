@@ -162,8 +162,13 @@ class LLMHoneybadger(object):
         global _active_instance
         if not self._initialized and _active_instance is not self:
             return
-        self._initialized = False
+        # Keep self.active True through _cleanup_wiring(): the owned
+        # provider's final force_flush() drains any spans recorded but not
+        # yet exported, and the exporter gates on owner.active (see
+        # _bridge._export_one). Flipping it False first would make that
+        # last flush silently drop every pending span.
         self._cleanup_wiring()
+        self._initialized = False
         with _lock:
             if _active_instance is self:
                 _active_instance = None
