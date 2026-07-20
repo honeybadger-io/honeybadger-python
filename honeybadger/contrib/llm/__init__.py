@@ -24,7 +24,21 @@ _INSTRUMENTORS = {
         "opentelemetry.instrumentation.genai.openai",
         "OpenAIInstrumentor",
     ),
+    "anthropic": (
+        "anthropic",
+        "opentelemetry.instrumentation.genai.anthropic",
+        "AnthropicInstrumentor",
+    ),
+    # BotocoreInstrumentor traces EVERY botocore call (S3, DynamoDB, ...),
+    # so bedrock is explicit-only: never part of auto-detection.
+    "bedrock": (
+        "botocore",
+        "opentelemetry.instrumentation.botocore",
+        "BotocoreInstrumentor",
+    ),
 }
+
+_EXPLICIT_ONLY = frozenset({"bedrock"})
 
 _active_instance = None
 _auto_instance = None
@@ -32,13 +46,16 @@ _lock = threading.Lock()
 _auto_lock = threading.Lock()
 
 
-def _otel_available():
+def _otel_available(requested=None):
     try:
-        return (
-            importlib.util.find_spec("opentelemetry.sdk") is not None
-            and importlib.util.find_spec("opentelemetry.instrumentation.genai.openai")
-            is not None
-        )
+        if importlib.util.find_spec("opentelemetry.sdk") is None:
+            return False
+        keys = requested if requested is not None else list(_INSTRUMENTORS)
+        for key in keys:
+            _sdk, module_name, _cls = _INSTRUMENTORS[key]
+            if importlib.util.find_spec(module_name) is not None:
+                return True
+        return False
     except ModuleNotFoundError:
         # find_spec("opentelemetry.sdk") raises (rather than returning None)
         # when the parent "opentelemetry" package is entirely absent -- the
@@ -129,7 +146,7 @@ class LLMHoneybadger(object):
             if unknown:
                 raise ValueError("unknown instruments: %s" % sorted(unknown))
             return list(self.instruments)
-        return list(_INSTRUMENTORS)
+        return [k for k in _INSTRUMENTORS if k not in _EXPLICIT_ONLY]
 
     def init(self):
         global _active_instance
@@ -147,7 +164,8 @@ class LLMHoneybadger(object):
                 )
             _active_instance = self
         try:
-            if not _otel_available():
+            requested = self._requested_instruments()
+            if not _otel_available(requested):
                 raise ImportError(
                     "LLM instrumentation requires the [llm] extra on Python >= 3.10: "
                     "pip install 'honeybadger[llm]'"

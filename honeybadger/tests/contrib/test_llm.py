@@ -184,7 +184,7 @@ def test_module_imports_without_otel():
 
 
 def test_init_without_deps_raises_importerror(monkeypatch):
-    monkeypatch.setattr(llm_module, "_otel_available", lambda: False)
+    monkeypatch.setattr(llm_module, "_otel_available", lambda requested=None: False)
     with pytest.raises(ImportError) as excinfo:
         LLMHoneybadger().init()
     assert "honeybadger[llm]" in str(excinfo.value)
@@ -231,7 +231,7 @@ class _FakeProvider:
 
 def _fake_otel(monkeypatch, instance_holder=None):
     """Stub the otel-touching seams so init() runs without the extra."""
-    monkeypatch.setattr(llm_module, "_otel_available", lambda: True)
+    monkeypatch.setattr(llm_module, "_otel_available", lambda requested=None: True)
     fake_provider = _FakeProvider()
     monkeypatch.setattr(llm_module, "_build_provider", lambda: fake_provider)
     monkeypatch.setattr(llm_module, "_attach_pipeline", lambda self, provider: None)
@@ -266,7 +266,7 @@ def test_teardown_raises_while_init_in_progress_on_another_thread(monkeypatch):
     # reserving _active_instance and setting self._initialized = True).
     # That let a concurrent tearDown() clear _active_instance out from under
     # the in-flight init(), defeating the single-instance guard.
-    monkeypatch.setattr(llm_module, "_otel_available", lambda: True)
+    monkeypatch.setattr(llm_module, "_otel_available", lambda requested=None: True)
     fake_provider = _FakeProvider()
     monkeypatch.setattr(llm_module, "_build_provider", lambda: fake_provider)
     monkeypatch.setattr(llm_module, "_activate_instrumentors", lambda self, p: [])
@@ -346,7 +346,7 @@ def test_invalid_export_value_rejected():
 
 
 def test_auto_init_is_silent_without_deps(monkeypatch):
-    monkeypatch.setattr(llm_module, "_otel_available", lambda: False)
+    monkeypatch.setattr(llm_module, "_otel_available", lambda requested=None: False)
     assert auto_init() is None  # no raise
 
 
@@ -434,6 +434,71 @@ def test_auto_init_thread_safety(monkeypatch):
     # returns the one shared instance afterward, not permanently disabled.
     final = auto_init()
     assert final is shared
+
+
+def test_registry_contains_phase2_providers():
+    assert set(llm_module._INSTRUMENTORS) == {"openai", "anthropic", "bedrock"}
+    for key, (sdk_mod, inst_mod, inst_cls) in llm_module._INSTRUMENTORS.items():
+        assert isinstance(sdk_mod, str) and isinstance(inst_mod, str) and isinstance(inst_cls, str)
+
+
+def test_bedrock_is_never_auto_detected():
+    assert "bedrock" in llm_module._EXPLICIT_ONLY
+    auto = LLMHoneybadger()._requested_instruments()
+    assert "bedrock" not in auto
+    assert "openai" in auto and "anthropic" in auto
+    explicit = LLMHoneybadger(instruments=["bedrock"])._requested_instruments()
+    assert explicit == ["bedrock"]
+
+
+def test_unknown_instrument_raises():
+    with pytest.raises(ValueError) as excinfo:
+        LLMHoneybadger(instruments=["watson"])._requested_instruments()
+    assert "watson" in str(excinfo.value)
+
+
+def test_otel_available_is_registry_driven(monkeypatch):
+    import importlib.util as ilu
+    real_find_spec = ilu.find_spec
+
+    def fake_find_spec(name, *args):
+        if name == "opentelemetry.sdk":
+            return object()
+        if name == "opentelemetry.instrumentation.genai.anthropic":
+            return object()
+        if name.startswith("opentelemetry.instrumentation"):
+            return None  # openai/botocore instrumentors absent
+        return real_find_spec(name, *args)
+
+    monkeypatch.setattr(ilu, "find_spec", fake_find_spec)
+    # anthropic-only install: available for anthropic, not for openai-only request
+    assert llm_module._otel_available(["anthropic"]) is True
+    assert llm_module._otel_available(["openai"]) is False
+    assert llm_module._otel_available() is True  # any-of default
+
+
+def test_activation_uses_registry_tuples(monkeypatch):
+    """instruments=['anthropic'] resolves module+class from the registry and
+    calls instrument(tracer_provider=...) — mocked import machinery."""
+    import importlib
+    recorded = {}
+
+    class FakeInstrumentor:
+        is_instrumented_by_opentelemetry = False
+        def instrument(self, tracer_provider=None):
+            recorded["provider"] = tracer_provider
+
+    fake_module = SimpleNamespace(AnthropicInstrumentor=FakeInstrumentor)
+    monkeypatch.setattr(importlib, "import_module", lambda name: fake_module)
+    monkeypatch.setattr(
+        importlib.util, "find_spec", lambda name, *a: object()
+    )
+    instance = LLMHoneybadger(instruments=["anthropic"])
+    provider = object()
+    activated = llm_module._activate_instrumentors(instance, provider)
+    assert activated == ["anthropic"]
+    assert recorded["provider"] is provider
+    assert "anthropic" in instance._instrumentors
 
 
 # --- framework auto-init wiring ---
