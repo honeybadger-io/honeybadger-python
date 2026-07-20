@@ -18,16 +18,23 @@ setup(
     author="Dave Sullivan",
     author_email="dave@davesullivan.ca",
     license="MIT",
-    packages=["honeybadger", "honeybadger.contrib"],
+    packages=["honeybadger", "honeybadger.contrib", "honeybadger.contrib.llm"],
+    python_requires=">=3.9",
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
         "License :: OSI Approved :: MIT License",
-        "Programming Language :: Python :: 3.4",
-        "Programming Language :: Python :: 3.5",
-        "Programming Language :: Python :: 3.6",
-        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
         "Topic :: System :: Monitoring",
     ],
     install_requires=["psutil", "six"],
+    extras_require={
+        "llm": [
+            'opentelemetry-sdk>=1.43,<2; python_version >= "3.10"',
+            'opentelemetry-instrumentation-genai-openai>=1.0b0,<1.1; python_version >= "3.10"',
+        ],
+    },
 )
