@@ -213,6 +213,15 @@ class LLMHoneybadger(object):
             return
         llm_config = honeybadger.config.insights_config.llm
         if llm_config.include_prompts or llm_config.include_responses:
+            # Verified against installed opentelemetry-util-genai source:
+            # get_content_capturing_mode() (opentelemetry/util/genai/utils.py)
+            # does `envvar.strip().upper()` before an Enum[] lookup on
+            # ContentCapturingMode, so this is case-insensitive. Both the
+            # openai and anthropic instrumentors route through that same
+            # function via opentelemetry.util.genai.handler.TelemetryHandler,
+            # so lowercase "span_only" enables span-content capture for both
+            # -- no per-provider casing divergence despite docs showing
+            # different cases (see .superpowers/sdd/task-2-report.md).
             os.environ[CONTENT_ENV_VAR] = "span_only"
             self._env_was_set_by_us = True
 
