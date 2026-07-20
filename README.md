@@ -405,9 +405,10 @@ database events.
 
 ## LLM Monitoring (beta)
 
-Honeybadger can automatically log your OpenAI calls — model, token usage,
-duration, and errors — as Insights events. Prompts and responses are **off
-by default** and can be enabled with one flag:
+Honeybadger can automatically log your LLM calls — model, token usage,
+duration, and errors — as Insights events. Supported providers: **OpenAI**,
+**Anthropic**, and **Bedrock** (metadata only — see below). Prompts and
+responses are **off by default** and can be enabled with one flag:
 
 ```python
 # pip install 'honeybadger[llm]'  (Python 3.10+)
@@ -423,18 +424,41 @@ honeybadger.configure(
         }
     },
 )
+
+# Then just use the OpenAI or Anthropic SDKs as normal -- calls are
+# captured automatically once instrumentation is initialized (see below).
 ```
 
 Django, Flask, and ASGI integrations activate LLM instrumentation
 automatically when the extra is installed **and** `insights_enabled=True` is
 set in `honeybadger.configure(...)` — auto-init is skipped entirely
-otherwise. Elsewhere, initialize explicitly:
+otherwise. Auto-detection covers OpenAI and Anthropic only. Elsewhere,
+initialize explicitly:
 
 ```python
 from honeybadger.contrib.llm import LLMHoneybadger
 
 LLMHoneybadger().init()
 ```
+
+**Bedrock requires explicit opt-in** — it is never auto-detected, even with
+the extra installed and `boto3` importable:
+
+```python
+LLMHoneybadger(instruments=["openai", "anthropic", "bedrock"]).init()
+```
+
+This is deliberate: the underlying instrumentor (`BotocoreInstrumentor`)
+traces *every* botocore call in the process — S3, DynamoDB, SQS, and so on,
+not just Bedrock — so auto-detecting it the way OpenAI/Anthropic are
+auto-detected would silently start tracing all of an application's AWS
+traffic. You must name `"bedrock"` explicitly in `instruments=[...]` to turn
+it on. Bedrock support is also **metadata-only**: `provider`, `model`, token
+usage, `finish_reason`, and errors are captured for `converse()` and
+`invoke_model()`, but prompt/response content is never captured at this
+instrumentor pin, regardless of `include_prompts`/`include_responses` — see
+[`honeybadger/contrib/llm.md`](honeybadger/contrib/llm.md) for the full
+explanation and evidence.
 
 If you configure your own `LLMHoneybadger` instance (e.g. `export="otlp"`
 or a custom `tracer_provider=`), call `.init()` **before** the framework
@@ -452,7 +476,9 @@ your process.
 
 Notes: streaming OpenAI calls report token usage only when you pass
 `stream_options={"include_usage": True}`; embedding inputs are never
-captured. Advanced: `LLMHoneybadger(export="otlp")` sends standard
+captured; Anthropic prompt-caching token counts (`cache_read_tokens`,
+`cache_creation_tokens`) are captured on `llm.chat` events when a call uses
+Anthropic's cache. Advanced: `LLMHoneybadger(export="otlp")` sends standard
 OTel-shaped spans to Honeybadger's OpenTelemetry endpoint instead of
 `llm.*` events (requires `opentelemetry-exporter-otlp-proto-http`).
 
