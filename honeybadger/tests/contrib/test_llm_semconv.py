@@ -117,6 +117,42 @@ def test_normalize_finish_reasons_string_not_indexed():
     assert n.data["finish_reason"] == "stop"
 
 
+def test_normalize_bedrock_legacy_system_dialect():
+    # OBSERVED (opentelemetry-instrumentation-botocore==0.64b0,
+    # extensions/bedrock.py BedrockExtension.extract_attributes(), against
+    # both converse() and invoke_model()): Bedrock spans carry the legacy
+    # `gen_ai.system` attribute (value "aws.bedrock") -- there is no
+    # `gen_ai.provider.name` on these spans, unlike the OpenAI/Anthropic
+    # instrumentors. `gen_ai.operation.name` IS present ("chat") for both
+    # the Converse and InvokeModel APIs, so classification into "llm.chat"
+    # works out of the box. This locks in that the adapter's existing
+    # legacy-fallback SCALAR_FIELDS mapping (`gen_ai.system` -> "provider")
+    # already handles the Bedrock dialect without any _semconv.py change.
+    # Content (gen_ai.input.messages / gen_ai.output.messages) is never
+    # present on Bedrock spans at this pin -- the instrumentor emits
+    # message content on the logs signal only (see test_llm_bedrock.py).
+    attrs = {
+        "rpc.system": "aws-api",
+        "rpc.service": "Bedrock Runtime",
+        "rpc.method": "Converse",
+        "gen_ai.system": "aws.bedrock",
+        "gen_ai.request.model": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+        "gen_ai.operation.name": "chat",
+        "gen_ai.usage.input_tokens": 9,
+        "gen_ai.usage.output_tokens": 3,
+        "gen_ai.response.finish_reasons": ["end_turn"],
+    }
+    n = normalize(FakeSpan(attributes=attrs))
+    assert n.event_type == "llm.chat"
+    assert n.data["provider"] == "aws.bedrock"
+    assert n.data["model"] == "anthropic.claude-3-5-sonnet-20241022-v2:0"
+    assert n.data["input_tokens"] == 9
+    assert n.data["output_tokens"] == 3
+    assert n.data["finish_reason"] == "end_turn"  # raw pass-through, no "stop" mapping
+    assert n.prompts is None  # no gen_ai.input.messages on this dialect
+    assert n.response is None  # no gen_ai.output.messages either
+
+
 def test_normalize_classifies_embeddings_and_unknown():
     emb = FakeSpan(
         attributes={
