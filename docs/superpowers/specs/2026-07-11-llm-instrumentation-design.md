@@ -49,7 +49,7 @@ Additional providers and frameworks in later phases attach to the same bridge, b
 Costs accepted:
 
 - **Optional dependency weight.** The OTel SDK arrives only via the `[llm]` extra; the core package stays zero-dependency. The contrib module imports cleanly when the extra isn't installed (lazy imports, Oban pattern); `init()` raises a clear `ImportError` naming the extra.
-- **Attribute-dialect churn.** See "Attribute dialects" below.
+- **Attribute-dialect churn.** See "Instrumentor selection" below.
 - **Process-global patches.** See "Ownership and lifecycle" below.
 
 ### Instrumentor selection: official OTel packages
