@@ -683,3 +683,76 @@ def test_otlp_exporter_requires_package(monkeypatch):
     with pytest.raises(ImportError) as excinfo:
         _bridge.make_otlp_exporter(owner())
     assert "opentelemetry-exporter-otlp-proto-http" in str(excinfo.value)
+
+
+# --- OTLP GenAI classification gate (bedrock containment) ---
+#
+# BotocoreInstrumentor traces EVERY botocore call (S3, DynamoDB, SQS, ...),
+# not just Bedrock. In OTLP export mode the scrubbing exporter must never
+# forward a span that carries no gen_ai.* attribute at all -- otherwise
+# activating "bedrock" would silently ship every AWS call on the process to
+# the OTel endpoint.
+
+
+def test_scrub_drops_spans_with_no_genai_attributes():
+    attrs = {
+        "rpc.system": "aws-api",
+        "rpc.method": "PutObject",
+        "aws.service": "S3",
+    }
+    assert scrub_attributes(attrs, LLMConfig(), []) is None
+
+
+def test_scrub_keeps_genai_spans_even_with_aws_attributes_present():
+    attrs = {
+        "gen_ai.request.model": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+        "rpc.system": "aws-api",
+        "aws.service": "Bedrock Runtime",
+    }
+    result = scrub_attributes(attrs, LLMConfig(), [])
+    assert result is not None
+    assert result["gen_ai.request.model"] == "anthropic.claude-3-5-sonnet-20241022-v2:0"
+
+
+def _real_span(attributes):
+    """Build a genuine ReadableSpan (not FakeSpan) so _clone_span's access
+    to .parent/.resource/.kind/.links/.instrumentation_scope works -- this
+    exercises the actual ScrubbingOTLPExporter.export() forwarding path."""
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+
+    capture = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(capture))
+    tracer = provider.get_tracer("test")
+    with tracer.start_as_current_span("op", attributes=attributes):
+        pass
+    provider.shutdown()
+    return capture.get_finished_spans()[0]
+
+
+def test_otlp_exporter_forwards_only_genai_spans():
+    from opentelemetry.sdk.trace.export import SpanExportResult
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+
+    configured()
+    non_genai = _real_span(
+        {"rpc.system": "aws-api", "aws.service": "S3", "rpc.method": "PutObject"}
+    )
+    genai = _real_span(
+        {"gen_ai.request.model": "gpt-4o", "gen_ai.operation.name": "chat"}
+    )
+
+    wrapped = InMemorySpanExporter()
+    exporter = _bridge.make_otlp_exporter(owner(), wrapped=wrapped)
+    result = exporter.export([non_genai, genai])
+    assert result == SpanExportResult.SUCCESS
+
+    exported = wrapped.get_finished_spans()
+    assert len(exported) == 1
+    assert dict(exported[0].attributes)["gen_ai.request.model"] == "gpt-4o"

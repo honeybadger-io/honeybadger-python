@@ -139,6 +139,12 @@ def scrub_attributes(attributes, llm_config, params_filters):
     or None when the span must not be exported at all."""
     if llm_config.disabled:
         return None
+    if not any(key.startswith("gen_ai.") for key in attributes):
+        # GenAI classification gate (bedrock containment): botocore
+        # instruments every AWS call (S3, DynamoDB, SQS, ...), not just
+        # Bedrock. A span with no gen_ai.* attribute at all is not an LLM
+        # call and must never reach the OTLP endpoint.
+        return None
     if _excluded(attributes.get("gen_ai.request.model"), llm_config.exclude_models):
         return None
 
@@ -190,7 +196,14 @@ def _normalize_content_entry(entry):
 def make_otlp_exporter(owner, wrapped=None):
     """Build the scrubbing OTLP exporter. `wrapped` is the real (or, for
     tests, a recording stand-in) SpanExporter that receives cloned/scrubbed
-    spans; defaults to a real OTLPSpanExporter targeting Honeybadger."""
+    spans; defaults to a real OTLPSpanExporter targeting Honeybadger.
+
+    GenAI classification gate: any span whose attributes contain no key
+    starting with "gen_ai." is dropped before it ever reaches `wrapped`
+    (see scrub_attributes()). This matters once "bedrock" is activated --
+    BotocoreInstrumentor traces every botocore call on the process (S3,
+    DynamoDB, SQS, ...), and export="otlp" must never forward those
+    non-GenAI spans to the configured OTel endpoint."""
     import importlib.util
 
     if wrapped is None and (
