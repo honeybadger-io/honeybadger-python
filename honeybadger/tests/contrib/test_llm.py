@@ -190,6 +190,29 @@ def test_init_without_deps_raises_importerror(monkeypatch):
     assert "honeybadger[llm]" in str(excinfo.value)
 
 
+def test_otel_available_handles_missing_parent_package(monkeypatch):
+    # Regression: find_spec("opentelemetry.sdk") RAISES ModuleNotFoundError
+    # (rather than returning None) when the "opentelemetry" package itself
+    # isn't installed at all -- the common core-only install / Python 3.9
+    # path. _otel_available() must treat that the same as "not found" so
+    # init() raises the documented [llm]-extra ImportError, not a bare
+    # "No module named 'opentelemetry'".
+    import importlib.util as ilu
+
+    real_find_spec = ilu.find_spec
+
+    def boom(name, *a, **kw):
+        if name.startswith("opentelemetry"):
+            raise ModuleNotFoundError("No module named 'opentelemetry'")
+        return real_find_spec(name, *a, **kw)
+
+    monkeypatch.setattr(ilu, "find_spec", boom)
+    assert llm_module._otel_available() is False
+    with pytest.raises(ImportError) as excinfo:
+        LLMHoneybadger().init()
+    assert "honeybadger[llm]" in str(excinfo.value)
+
+
 class _FakeProvider:
     """Minimal stand-in for opentelemetry.sdk.trace.TracerProvider."""
 
@@ -235,6 +258,46 @@ def test_init_teardown_lifecycle_and_guard(monkeypatch):
     assert first.active is False
     second.init()  # guard released
     second.tearDown()
+
+
+def test_teardown_raises_while_init_in_progress_on_another_thread(monkeypatch):
+    # Regression: tearDown() used to proceed whenever _active_instance is
+    # self, even if init() was still mid-flight on another thread (between
+    # reserving _active_instance and setting self._initialized = True).
+    # That let a concurrent tearDown() clear _active_instance out from under
+    # the in-flight init(), defeating the single-instance guard.
+    monkeypatch.setattr(llm_module, "_otel_available", lambda: True)
+    fake_provider = _FakeProvider()
+    monkeypatch.setattr(llm_module, "_build_provider", lambda: fake_provider)
+    monkeypatch.setattr(llm_module, "_activate_instrumentors", lambda self, p: [])
+    monkeypatch.setattr(llm_module, "_deactivate_instrumentors", lambda self: None)
+
+    entered = threading.Event()
+    proceed = threading.Event()
+
+    def blocking_attach(self, provider):
+        entered.set()
+        assert proceed.wait(timeout=5), "test deadlocked waiting to unblock init()"
+
+    monkeypatch.setattr(llm_module, "_attach_pipeline", blocking_attach)
+
+    instance = LLMHoneybadger()
+    init_thread = threading.Thread(target=instance.init)
+    init_thread.start()
+    try:
+        assert entered.wait(timeout=5), "init() never reached _attach_pipeline"
+        # init() has reserved _active_instance but hasn't finished yet.
+        with pytest.raises(RuntimeError, match="init in progress"):
+            instance.tearDown()
+    finally:
+        proceed.set()
+        init_thread.join(timeout=5)
+
+    assert instance.active is True
+    assert llm_module._active_instance is instance
+    instance.tearDown()
+    assert instance.active is False
+    assert llm_module._active_instance is None
 
 
 def test_env_gating_set_and_restored(monkeypatch):

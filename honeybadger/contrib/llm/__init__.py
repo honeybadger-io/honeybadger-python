@@ -33,11 +33,19 @@ _auto_lock = threading.Lock()
 
 
 def _otel_available():
-    return (
-        importlib.util.find_spec("opentelemetry.sdk") is not None
-        and importlib.util.find_spec("opentelemetry.instrumentation.genai.openai")
-        is not None
-    )
+    try:
+        return (
+            importlib.util.find_spec("opentelemetry.sdk") is not None
+            and importlib.util.find_spec("opentelemetry.instrumentation.genai.openai")
+            is not None
+        )
+    except ModuleNotFoundError:
+        # find_spec("opentelemetry.sdk") raises (rather than returning None)
+        # when the parent "opentelemetry" package is entirely absent -- the
+        # common core-only install. Treat that the same as "not found" so
+        # init() raises the documented [llm]-extra ImportError instead of a
+        # confusing "No module named 'opentelemetry'".
+        return False
 
 
 def _build_provider():
@@ -160,8 +168,16 @@ class LLMHoneybadger(object):
 
     def tearDown(self):
         global _active_instance
-        if not self._initialized and _active_instance is not self:
-            return
+        with _lock:
+            if _active_instance is self and not self._initialized:
+                # Another thread is mid-init() on this exact instance:
+                # _active_instance was reserved but init() hasn't finished
+                # (or failed) yet. Tearing down now would race init()'s own
+                # cleanup/state transitions. Mirrors init()'s own
+                # "init already in progress" guard.
+                raise RuntimeError("init in progress; cannot tearDown")
+            if not self._initialized and _active_instance is not self:
+                return
         # Keep self.active True through _cleanup_wiring(): the owned
         # provider's final force_flush() drains any spans recorded but not
         # yet exported, and the exporter gates on owner.active (see
@@ -205,13 +221,23 @@ class LLMHoneybadger(object):
             except Exception as exc:
                 logger.debug("honeybadger llm: provider shutdown failed: %s", exc)
         elif self._borrowed_provider is not None and self._processor is not None:
-            # Borrowed provider: never shut it down (it's the app's), but we
-            # still need to drain any spans buffered in our own processor
-            # before self.active goes False, or they're silently dropped.
+            # Borrowed provider: never shut IT down (it's the app's), but we
+            # still need to (a) drain any spans buffered in our own
+            # processor before self.active goes False, or they're silently
+            # dropped, and (b) shut down OUR processor afterward so its
+            # background batch-worker thread stops -- otherwise repeated
+            # init/tearDown against one borrowed provider accumulates live
+            # threads forever (OTel has no remove_span_processor() API, so
+            # the processor stays attached, but a shutdown processor is
+            # inert: on_end() becomes a no-op). The provider itself and its
+            # other processors are untouched.
             try:
                 self._processor.force_flush()
+                self._processor.shutdown()
             except Exception as exc:
-                logger.debug("honeybadger llm: processor flush failed: %s", exc)
+                logger.debug(
+                    "honeybadger llm: processor flush/shutdown failed: %s", exc
+                )
         self._provider = None
         self._processor = None
 
