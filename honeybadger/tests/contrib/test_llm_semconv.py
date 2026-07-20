@@ -109,6 +109,14 @@ def test_normalize_error_extraction_order():
     assert normalize(span).data["error"] == "boom"
 
 
+def test_normalize_finish_reasons_string_not_indexed():
+    # A bare string is itself iterable; guard against yielding "s" (its
+    # first character) instead of the whole reason.
+    attrs = chat_attributes(**{"gen_ai.response.finish_reasons": "stop"})
+    n = normalize(FakeSpan(attributes=attrs))
+    assert n.data["finish_reason"] == "stop"
+
+
 def test_normalize_classifies_embeddings_and_unknown():
     emb = FakeSpan(
         attributes={

@@ -57,7 +57,14 @@ def normalize(span) -> Optional[NormalizedLLMSpan]:
 
     finish_reasons = attributes.get("gen_ai.response.finish_reasons")
     if finish_reasons:
-        data["finish_reason"] = list(finish_reasons)[0]
+        # Normally a sequence (tuple/list); guard against a bare string,
+        # which is itself iterable and would otherwise yield its first
+        # character instead of the whole reason (e.g. "s" from "stop").
+        data["finish_reason"] = (
+            finish_reasons
+            if isinstance(finish_reasons, str)
+            else list(finish_reasons)[0]
+        )
 
     duration = _duration_ms(span)
     if duration is not None:
