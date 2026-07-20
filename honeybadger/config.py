@@ -68,12 +68,20 @@ class CeleryConfig:
 
 
 @dataclass
+class ObanConfig:
+    disabled: bool = False
+    exclude_workers: List[Union[str, Pattern]] = field(default_factory=list)
+    include_args: bool = False
+
+
+@dataclass
 class InsightsConfig:
     db: DBConfig = field(default_factory=DBConfig)
     django: DjangoConfig = field(default_factory=DjangoConfig)
     flask: FlaskConfig = field(default_factory=FlaskConfig)
     celery: CeleryConfig = field(default_factory=CeleryConfig)
     asgi: ASGIConfig = field(default_factory=ASGIConfig)
+    oban: ObanConfig = field(default_factory=ObanConfig)
 
 
 @dataclass

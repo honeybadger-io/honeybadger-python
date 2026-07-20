@@ -202,3 +202,23 @@ def test_configure_merges_insights_config():
     assert c.insights_config.celery.disabled is True
 
     assert c.insights_config.db.include_params is True
+
+
+def test_insights_config_has_oban_field():
+    from honeybadger.config import InsightsConfig, ObanConfig
+
+    cfg = InsightsConfig()
+    assert isinstance(cfg.oban, ObanConfig)
+    assert cfg.oban.disabled is False
+    assert cfg.oban.exclude_workers == []
+    assert cfg.oban.include_args is False
+
+
+def test_oban_config_accepts_exclude_workers_patterns():
+    import re
+    from honeybadger.config import ObanConfig
+
+    cfg = ObanConfig(
+        exclude_workers=["myapp.LowPriorityWorker", re.compile(r"^cron\.")]
+    )
+    assert len(cfg.exclude_workers) == 2
