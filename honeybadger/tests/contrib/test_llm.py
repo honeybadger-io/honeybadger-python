@@ -1,7 +1,10 @@
 import json
+import os
 import re
 from types import SimpleNamespace
 from unittest.mock import patch
+
+import pytest
 
 from honeybadger import honeybadger
 from honeybadger.contrib.llm import _bridge
@@ -11,6 +14,9 @@ from honeybadger.contrib.llm._bridge import (
     export_spans,
 )
 from honeybadger.tests.contrib.llm_helpers import FakeSpan
+
+import honeybadger.contrib.llm as llm_module
+from honeybadger.contrib.llm import LLMHoneybadger, auto_init, CONTENT_ENV_VAR
 
 
 class RecordingSpan(FakeSpan):
@@ -138,3 +144,144 @@ def test_export_never_raises_on_malformed_span():
     with patch.object(honeybadger, "event") as mock_event:
         export_spans([ExplodingSpan(), chat_span()], owner())  # survives, continues
         mock_event.assert_called_once()
+
+
+# --- LLMHoneybadger shell + auto_init ---
+
+
+@pytest.fixture(autouse=True)
+def reset_llm_state(monkeypatch):
+    yield
+    if llm_module._active_instance is not None:
+        llm_module._active_instance.tearDown()
+    llm_module._auto_instance = None
+    os.environ.pop(CONTENT_ENV_VAR, None)
+
+
+def test_module_imports_without_otel():
+    # The suite itself may not have otel installed on this row; importing
+    # the module and constructing the class must always work.
+    instance = LLMHoneybadger()
+    assert instance.active is False
+
+
+def test_init_without_deps_raises_importerror(monkeypatch):
+    monkeypatch.setattr(llm_module, "_otel_available", lambda: False)
+    with pytest.raises(ImportError) as excinfo:
+        LLMHoneybadger().init()
+    assert "honeybadger[llm]" in str(excinfo.value)
+
+
+class _FakeProvider:
+    """Minimal stand-in for opentelemetry.sdk.trace.TracerProvider."""
+
+    def __init__(self):
+        self.added = []
+
+    def add_span_processor(self, processor):
+        self.added.append(processor)
+
+    def shutdown(self):
+        self.added.append("shutdown")
+
+    def force_flush(self, timeout_millis=30000):
+        return True
+
+
+def _fake_otel(monkeypatch, instance_holder=None):
+    """Stub the otel-touching seams so init() runs without the extra."""
+    monkeypatch.setattr(llm_module, "_otel_available", lambda: True)
+    fake_provider = _FakeProvider()
+    monkeypatch.setattr(llm_module, "_build_provider", lambda: fake_provider)
+    monkeypatch.setattr(llm_module, "_attach_pipeline", lambda self, provider: None)
+    instrumented = []
+    monkeypatch.setattr(
+        llm_module,
+        "_activate_instrumentors",
+        lambda self, provider: instrumented.append("openai") or ["openai"],
+    )
+    monkeypatch.setattr(llm_module, "_deactivate_instrumentors", lambda self: None)
+    return fake_provider, instrumented
+
+
+def test_init_teardown_lifecycle_and_guard(monkeypatch):
+    _fake_otel(monkeypatch)
+    first = LLMHoneybadger()
+    first.init()
+    assert first.active is True
+    first.init()  # idempotent
+    second = LLMHoneybadger()
+    with pytest.raises(RuntimeError):
+        second.init()
+    first.tearDown()
+    assert first.active is False
+    second.init()  # guard released
+    second.tearDown()
+
+
+def test_env_gating_set_and_restored(monkeypatch):
+    _fake_otel(monkeypatch)
+    honeybadger.configure(
+        api_key="fake",
+        insights_enabled=True,
+        insights_config={"llm": {"include_prompts": True}},
+    )
+    instance = LLMHoneybadger()
+    instance.init()
+    assert os.environ[CONTENT_ENV_VAR] == "span_only"
+    instance.tearDown()
+    assert CONTENT_ENV_VAR not in os.environ
+
+
+def test_env_gating_never_overrides_user(monkeypatch):
+    _fake_otel(monkeypatch)
+    os.environ[CONTENT_ENV_VAR] = "no_content"
+    honeybadger.configure(
+        api_key="fake",
+        insights_enabled=True,
+        insights_config={"llm": {"include_prompts": True}},
+    )
+    instance = LLMHoneybadger()
+    instance.init()
+    assert os.environ[CONTENT_ENV_VAR] == "no_content"
+    instance.tearDown()
+    assert os.environ[CONTENT_ENV_VAR] == "no_content"
+
+
+def test_env_gating_left_unset_when_content_off(monkeypatch):
+    _fake_otel(monkeypatch)
+    honeybadger.configure(
+        api_key="fake", insights_enabled=True, insights_config={"llm": {}}
+    )
+    instance = LLMHoneybadger()
+    instance.init()
+    assert CONTENT_ENV_VAR not in os.environ
+    instance.tearDown()
+
+
+def test_invalid_export_value_rejected():
+    with pytest.raises(ValueError):
+        LLMHoneybadger(export="carrier-pigeon")
+
+
+def test_auto_init_is_silent_without_deps(monkeypatch):
+    monkeypatch.setattr(llm_module, "_otel_available", lambda: False)
+    assert auto_init() is None  # no raise
+
+
+def test_auto_init_shares_one_instance(monkeypatch):
+    _fake_otel(monkeypatch)
+    honeybadger.configure(api_key="fake", insights_enabled=True)
+    first = auto_init()
+    second = auto_init()
+    assert first is second and first.active
+
+
+def test_auto_init_respects_disabled(monkeypatch):
+    _fake_otel(monkeypatch)
+    honeybadger.configure(
+        api_key="fake",
+        insights_enabled=True,
+        insights_config={"llm": {"disabled": True}},
+    )
+    assert auto_init() is None
