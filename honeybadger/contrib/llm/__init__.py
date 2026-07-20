@@ -184,7 +184,7 @@ class LLMHoneybadger(object):
 
     def _build_exporter(self):
         if self.export == "otlp":
-            # Task 8 adds _bridge.make_otlp_exporter; not exercised until then.
+            # OTLP exporter requires the optional opentelemetry-exporter-otlp-proto-http package
             return getattr(_bridge, "make_otlp_exporter")(self)
         return _bridge.make_events_exporter(self)
 

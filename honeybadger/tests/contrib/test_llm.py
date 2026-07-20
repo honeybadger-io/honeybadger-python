@@ -422,6 +422,36 @@ def test_scrub_returns_none_for_excluded_or_disabled():
     assert scrub_attributes(attrs, LLMConfig(disabled=True), []) is None
 
 
+def test_scrub_unparseable_content_is_json_encoded():
+    attrs = {
+        "gen_ai.request.model": "gpt-4o",
+        "gen_ai.input.messages": "{not json",
+    }
+    config = LLMConfig(include_prompts=True)
+    result = scrub_attributes(attrs, config, [])
+    assert (
+        json.loads(result["gen_ai.input.messages"]) == "[unparseable content removed]"
+    )
+
+
+def test_scrub_gates_system_instructions_with_prompts():
+    attrs = {
+        "gen_ai.request.model": "gpt-4o",
+        "gen_ai.system_instructions": json.dumps(
+            [{"type": "text", "content": "be brief"}]
+        ),
+    }
+    # Default config: system_instructions should be dropped
+    result = scrub_attributes(attrs, LLMConfig(), [])
+    assert "gen_ai.system_instructions" not in result
+
+    # With include_prompts=True: system_instructions should be kept
+    result = scrub_attributes(attrs, LLMConfig(include_prompts=True), [])
+    assert "gen_ai.system_instructions" in result
+    decoded = json.loads(result["gen_ai.system_instructions"])
+    assert decoded == [{"type": "text", "content": "be brief"}]
+
+
 def test_otlp_exporter_requires_package(monkeypatch):
     import importlib.util as ilu
 

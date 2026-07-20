@@ -159,7 +159,7 @@ def _scrub_content_attr(raw, params_filters, max_content_length):
     try:
         decoded = _json.loads(raw) if isinstance(raw, str) else raw
     except (ValueError, TypeError):
-        return "[unparseable content removed]"
+        return _json.dumps("[unparseable content removed]")
     if not isinstance(decoded, list):
         decoded = [decoded]
     messages = [m if isinstance(m, dict) else {"content": m} for m in decoded]
@@ -194,6 +194,8 @@ def make_otlp_exporter(owner):
     class ScrubbingOTLPExporter(SpanExporter):
         def export(self, spans):
             if not getattr(owner, "active", False):
+                return SpanExportResult.SUCCESS
+            if not honeybadger.config.insights_enabled:
                 return SpanExportResult.SUCCESS
             llm_config = honeybadger.config.insights_config.llm
             filters = honeybadger.config.params_filters
