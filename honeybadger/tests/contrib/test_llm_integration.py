@@ -160,6 +160,51 @@ def test_teardown_flushes_buffered_spans_without_manual_flush(llm):
     assert event_type == "llm.chat"
 
 
+def test_teardown_flushes_buffered_spans_for_borrowed_provider(monkeypatch):
+    # Regression: the borrowed-provider tearDown() path used to skip
+    # flushing entirely (flush only ran for owned providers), silently
+    # dropping any span still sitting in the BatchSpanProcessor's buffer.
+    from opentelemetry.sdk.trace import TracerProvider
+
+    monkeypatch.setenv(CONTENT_ENV_VAR, "span_only")
+    honeybadger.configure(
+        api_key="fake",
+        insights_enabled=True,
+        insights_config={"llm": {"include_prompts": True, "include_responses": True}},
+    )
+    provider = TracerProvider()
+    shutdown_mock = patch.object(provider, "shutdown", wraps=provider.shutdown)
+    instance = LLMHoneybadger(instruments=["openai"], tracer_provider=provider)
+    instance.init()
+    client = openai_client(lambda request: httpx.Response(200, json=CHAT_RESPONSE))
+    with shutdown_mock as mock_shutdown:
+        with patch.object(honeybadger, "event") as mock_event:
+            client.chat.completions.create(
+                model="gpt-4o", messages=[{"role": "user", "content": "hi"}]
+            )
+            # No manual flush -- tearDown() alone must deliver the event.
+            instance.tearDown()
+        assert mock_event.called
+        event_type, data = mock_event.call_args[0]
+        assert event_type == "llm.chat"
+        # Borrowed provider must never be shut down -- it's the app's.
+        mock_shutdown.assert_not_called()
+
+        # Inertness: spans ended after tearDown() must not emit. The openai
+        # instrumentor itself is uninstrumented by tearDown(), so drive the
+        # (still physically attached -- no remove_span_processor API)
+        # exporter pipeline directly via the borrowed provider's tracer.
+        with patch.object(honeybadger, "event") as mock_event_after:
+            tracer = provider.get_tracer("test-inertness")
+            with tracer.start_as_current_span("chat gpt-4o") as span:
+                span.set_attribute("gen_ai.operation.name", "chat")
+                span.set_attribute("gen_ai.request.model", "gpt-4o")
+            provider.force_flush()
+        assert not mock_event_after.called
+
+    provider.shutdown()
+
+
 def test_early_terminated_stream_still_emits(llm):
     chunks = [
         {

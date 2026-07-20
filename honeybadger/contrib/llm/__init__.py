@@ -204,6 +204,14 @@ class LLMHoneybadger(object):
                 self._provider.shutdown()
             except Exception as exc:
                 logger.debug("honeybadger llm: provider shutdown failed: %s", exc)
+        elif self._borrowed_provider is not None and self._processor is not None:
+            # Borrowed provider: never shut it down (it's the app's), but we
+            # still need to drain any spans buffered in our own processor
+            # before self.active goes False, or they're silently dropped.
+            try:
+                self._processor.force_flush()
+            except Exception as exc:
+                logger.debug("honeybadger llm: processor flush failed: %s", exc)
         self._provider = None
         self._processor = None
 
