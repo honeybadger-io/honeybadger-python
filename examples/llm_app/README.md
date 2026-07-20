@@ -45,7 +45,11 @@ This will:
 
 Expected output: the script exits cleanly and prints `Done`. With a real API
 key you should see two `llm.chat` events in your Honeybadger project's
-Insights shortly after — one with `stream: false`, one with `stream: true`.
+Insights shortly after — one for the regular call, one for the streamed
+call. Note that at the pinned instrumentor version there is no `stream` or
+`streaming` field on the event to tell them apart (see the attribute matrix
+in `honeybadger/contrib/llm.md`); distinguish them by `duration`, timestamp,
+or the query below.
 
 ## Query in Insights
 
