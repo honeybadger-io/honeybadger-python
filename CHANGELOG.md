@@ -3,6 +3,13 @@ All notable changes to this project will be documented in this file. See [Keep a
 CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
+## [1.3.0](https://github.com/honeybadger-io/honeybadger-python/compare/v1.2.4...v1.3.0) (2026-07-20)
+
+
+### Features
+
+* add support for Oban ([#261](https://github.com/honeybadger-io/honeybadger-python/issues/261)) ([bfc0eb0](https://github.com/honeybadger-io/honeybadger-python/commit/bfc0eb0e5bab491a37c6a45c1358824a83a1991a))
+
 ## [1.2.4](https://github.com/honeybadger-io/honeybadger-python/compare/v1.2.3...v1.2.4) (2026-07-03)
 
 
