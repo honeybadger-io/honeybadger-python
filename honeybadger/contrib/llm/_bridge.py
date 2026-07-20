@@ -167,18 +167,20 @@ def _scrub_content_attr(raw, params_filters, max_content_length):
     return _json.dumps(policied, ensure_ascii=False, default=repr)
 
 
-def make_otlp_exporter(owner):
+def make_otlp_exporter(owner, wrapped=None):
+    """Build the scrubbing OTLP exporter. `wrapped` is the real (or, for
+    tests, a recording stand-in) SpanExporter that receives cloned/scrubbed
+    spans; defaults to a real OTLPSpanExporter targeting Honeybadger."""
     import importlib.util
 
-    if importlib.util.find_spec("opentelemetry.exporter.otlp.proto.http") is None:
+    if wrapped is None and (
+        importlib.util.find_spec("opentelemetry.exporter.otlp.proto.http") is None
+    ):
         raise ImportError(
             "export='otlp' requires opentelemetry-exporter-otlp-proto-http "
             "(not part of the honeybadger[llm] extra): "
             "pip install opentelemetry-exporter-otlp-proto-http"
         )
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import (  # type: ignore[import-not-found]
-        OTLPSpanExporter,
-    )
     from opentelemetry.sdk.trace import ReadableSpan  # type: ignore[import-not-found]
     from opentelemetry.sdk.trace.export import (  # type: ignore[import-not-found]
         SpanExporter,
@@ -186,10 +188,15 @@ def make_otlp_exporter(owner):
     )
 
     config = honeybadger.config
-    wrapped = OTLPSpanExporter(
-        endpoint=config.endpoint.rstrip("/") + "/v1/traces",
-        headers={"X-API-Key": config.api_key},
-    )
+    if wrapped is None:
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (  # type: ignore[import-not-found]
+            OTLPSpanExporter,
+        )
+
+        wrapped = OTLPSpanExporter(
+            endpoint=config.endpoint.rstrip("/") + "/v1/traces",
+            headers={"X-API-Key": config.api_key},
+        )
 
     class ScrubbingOTLPExporter(SpanExporter):
         def export(self, spans):

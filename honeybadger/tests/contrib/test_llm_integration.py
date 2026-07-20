@@ -33,6 +33,14 @@ CHAT_RESPONSE = {
 
 
 @pytest.fixture
+def otel_otlp():
+    """Gate OTLP-mode tests on the separately-installed exporter package
+    without skipping the whole module (openai/otel/httpx are required
+    unconditionally above)."""
+    pytest.importorskip("opentelemetry.exporter.otlp.proto.http")
+
+
+@pytest.fixture
 def llm(monkeypatch):
     monkeypatch.setenv(CONTENT_ENV_VAR, "span_only")
     honeybadger.configure(
@@ -203,6 +211,125 @@ def test_teardown_flushes_buffered_spans_for_borrowed_provider(monkeypatch):
         assert not mock_event_after.called
 
     provider.shutdown()
+
+
+class _RecordingExporter:
+    """Stand-in for the real OTLPSpanExporter: records what it's handed
+    instead of making network calls."""
+
+    def __init__(self):
+        self.spans = []
+
+    def export(self, spans):
+        from opentelemetry.sdk.trace.export import SpanExportResult
+
+        self.spans.extend(spans)
+        return SpanExportResult.SUCCESS
+
+    def shutdown(self):
+        pass
+
+    def force_flush(self, timeout_millis=30000):
+        return True
+
+
+class _Owner:
+    active = True
+
+
+def _otlp_recorder_setup(**llm_config_overrides):
+    """Real TracerProvider + real make_otlp_exporter(owner, wrapped=recorder),
+    synchronous SimpleSpanProcessor so we don't need to sleep/flush threads."""
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+
+    from honeybadger.contrib.llm import _bridge
+
+    honeybadger.configure(
+        api_key="fake",
+        insights_enabled=True,
+        insights_config={"llm": llm_config_overrides},
+    )
+    recorder = _RecordingExporter()
+    exporter = _bridge.make_otlp_exporter(_Owner(), wrapped=recorder)
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    return provider, recorder
+
+
+def _make_content_span(
+    tracer, prompt="secret prompt", model="gpt-4o", name="chat gpt-4o", extra=None
+):
+    message = {"role": "user", "parts": [{"type": "text", "content": prompt}]}
+    if extra:
+        message.update(extra)
+    with tracer.start_as_current_span(name) as span:
+        span.set_attribute("gen_ai.operation.name", "chat")
+        span.set_attribute("gen_ai.request.model", model)
+        span.set_attribute("gen_ai.input.messages", json.dumps([message]))
+        span.set_attribute("gen_ai.system_instructions", json.dumps("be helpful"))
+    return span
+
+
+def test_otlp_exporter_drops_content_attrs_by_default(otel_otlp):
+    provider, recorder = _otlp_recorder_setup()
+    tracer = provider.get_tracer("test-otlp")
+    original = _make_content_span(tracer)
+    provider.force_flush()
+
+    assert len(recorder.spans) == 1
+    cloned = recorder.spans[0]
+    assert "gen_ai.input.messages" not in cloned.attributes
+    assert "gen_ai.system_instructions" not in cloned.attributes
+    assert cloned.attributes["gen_ai.request.model"] == "gpt-4o"
+
+    # (d) original span's attributes must not be mutated by scrub+clone.
+    assert "gen_ai.input.messages" in original.attributes
+    assert "secret prompt" in original.attributes["gen_ai.input.messages"]
+
+
+def test_otlp_exporter_keeps_and_redacts_content_when_opted_in(otel_otlp):
+    provider, recorder = _otlp_recorder_setup(include_prompts=True)
+    honeybadger.configure(params_filters=["password"])
+    tracer = provider.get_tracer("test-otlp")
+    _make_content_span(tracer, extra={"password": "hunter2"})
+    provider.force_flush()
+
+    assert len(recorder.spans) == 1
+    cloned = recorder.spans[0]
+    # Content attr survives (not dropped, unlike the default case)...
+    assert "gen_ai.input.messages" in cloned.attributes
+    decoded = json.loads(cloned.attributes["gen_ai.input.messages"])
+    # ...but is redacted per params_filters (structural redaction by key).
+    assert decoded[0]["password"] == "[FILTERED]"
+    assert decoded[0]["parts"][0]["content"] == "secret prompt"
+
+
+def test_otlp_exporter_drops_excluded_model_spans(otel_otlp):
+    provider, recorder = _otlp_recorder_setup(exclude_models=["gpt-4o"])
+    tracer = provider.get_tracer("test-otlp")
+    _make_content_span(tracer, model="gpt-4o")
+    _make_content_span(tracer, model="gpt-3.5-turbo")
+    provider.force_flush()
+
+    models = [s.attributes["gen_ai.request.model"] for s in recorder.spans]
+    assert "gpt-4o" not in models
+    assert "gpt-3.5-turbo" in models
+
+
+def test_otlp_exporter_clone_preserves_span_shape(otel_otlp):
+    provider, recorder = _otlp_recorder_setup()
+    tracer = provider.get_tracer("test-otlp")
+    original = _make_content_span(tracer)
+    provider.force_flush()
+
+    assert len(recorder.spans) == 1
+    cloned = recorder.spans[0]
+    assert cloned.name == original.name
+    assert cloned.kind == original.kind
+    assert cloned.status.status_code == original.status.status_code
+    assert cloned.start_time == original.start_time
+    assert cloned.end_time == original.end_time
 
 
 def test_early_terminated_stream_still_emits(llm):
