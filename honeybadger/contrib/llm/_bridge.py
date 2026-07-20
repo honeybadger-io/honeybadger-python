@@ -120,3 +120,115 @@ def make_events_exporter(owner):
             return True
 
     return HoneybadgerLLMSpanExporter()
+
+
+_CONTENT_ATTRS = {
+    "gen_ai.input.messages": "include_prompts",
+    "gen_ai.system_instructions": "include_prompts",
+    "gen_ai.output.messages": "include_responses",
+}
+
+
+def scrub_attributes(attributes, llm_config, params_filters):
+    """Return a new, content-policied attributes dict for OTLP export,
+    or None when the span must not be exported at all."""
+    if llm_config.disabled:
+        return None
+    if _excluded(attributes.get("gen_ai.request.model"), llm_config.exclude_models):
+        return None
+
+    result = {}
+    for key, value in attributes.items():
+        flag = _CONTENT_ATTRS.get(key)
+        if flag is None:
+            result[key] = value
+            continue
+        if not getattr(llm_config, flag):
+            continue  # drop content attribute entirely
+        result[key] = _scrub_content_attr(
+            value, params_filters, llm_config.max_content_length
+        )
+    return result
+
+
+def _scrub_content_attr(raw, params_filters, max_content_length):
+    import json as _json
+
+    from ._policy import apply_content_policy
+
+    try:
+        decoded = _json.loads(raw) if isinstance(raw, str) else raw
+    except (ValueError, TypeError):
+        return "[unparseable content removed]"
+    if not isinstance(decoded, list):
+        decoded = [decoded]
+    messages = [m if isinstance(m, dict) else {"content": m} for m in decoded]
+    policied = apply_content_policy(messages, params_filters, max_content_length)
+    return _json.dumps(policied, ensure_ascii=False, default=repr)
+
+
+def make_otlp_exporter(owner):
+    import importlib.util
+
+    if importlib.util.find_spec("opentelemetry.exporter.otlp.proto.http") is None:
+        raise ImportError(
+            "export='otlp' requires opentelemetry-exporter-otlp-proto-http "
+            "(not part of the honeybadger[llm] extra): "
+            "pip install opentelemetry-exporter-otlp-proto-http"
+        )
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import (  # type: ignore[import-not-found]
+        OTLPSpanExporter,
+    )
+    from opentelemetry.sdk.trace import ReadableSpan  # type: ignore[import-not-found]
+    from opentelemetry.sdk.trace.export import (  # type: ignore[import-not-found]
+        SpanExporter,
+        SpanExportResult,
+    )
+
+    config = honeybadger.config
+    wrapped = OTLPSpanExporter(
+        endpoint=config.endpoint.rstrip("/") + "/v1/traces",
+        headers={"X-API-Key": config.api_key},
+    )
+
+    class ScrubbingOTLPExporter(SpanExporter):
+        def export(self, spans):
+            if not getattr(owner, "active", False):
+                return SpanExportResult.SUCCESS
+            llm_config = honeybadger.config.insights_config.llm
+            filters = honeybadger.config.params_filters
+            out = []
+            for span in spans:
+                scrubbed = scrub_attributes(
+                    dict(span.attributes or {}), llm_config, filters
+                )
+                if scrubbed is None:
+                    continue
+                out.append(_clone_span(span, scrubbed))
+            if not out:
+                return SpanExportResult.SUCCESS
+            return wrapped.export(out)
+
+        def shutdown(self):
+            wrapped.shutdown()
+
+        def force_flush(self, timeout_millis=30000):
+            return wrapped.force_flush(timeout_millis)
+
+    def _clone_span(span, attributes):
+        return ReadableSpan(
+            name=span.name,
+            context=span.get_span_context(),
+            parent=span.parent,
+            resource=span.resource,
+            attributes=attributes,
+            events=span.events,
+            links=span.links,
+            kind=span.kind,
+            status=span.status,
+            start_time=span.start_time,
+            end_time=span.end_time,
+            instrumentation_scope=span.instrumentation_scope,
+        )
+
+    return ScrubbingOTLPExporter()

@@ -382,3 +382,55 @@ def test_django_middleware_calls_auto_init(monkeypatch):
             DjangoHoneybadgerMiddleware(get_response=lambda request: None)
 
     assert calls == [1]
+
+
+# --- scrubbing OTLP exporter ---
+
+from honeybadger.contrib.llm._bridge import scrub_attributes
+from honeybadger.config import LLMConfig
+
+
+def test_scrub_drops_content_attrs_by_default():
+    attrs = {
+        "gen_ai.request.model": "gpt-4o",
+        "gen_ai.input.messages": json.dumps([{"role": "user", "parts": []}]),
+        "gen_ai.output.messages": json.dumps([{"role": "assistant", "parts": []}]),
+    }
+    result = scrub_attributes(attrs, LLMConfig(), ["password"])
+    assert "gen_ai.input.messages" not in result
+    assert "gen_ai.output.messages" not in result
+    assert result["gen_ai.request.model"] == "gpt-4o"
+    assert attrs["gen_ai.input.messages"]  # input untouched
+
+
+def test_scrub_keeps_and_redacts_content_when_opted_in():
+    attrs = {
+        "gen_ai.request.model": "gpt-4o",
+        "gen_ai.input.messages": json.dumps(
+            [{"role": "user", "content": "hi", "password": "hunter2"}]
+        ),
+    }
+    config = LLMConfig(include_prompts=True)
+    result = scrub_attributes(attrs, config, ["password"])
+    decoded = json.loads(result["gen_ai.input.messages"])
+    assert decoded[0]["password"] == "[FILTERED]"
+
+
+def test_scrub_returns_none_for_excluded_or_disabled():
+    attrs = {"gen_ai.request.model": "gpt-4o"}
+    assert scrub_attributes(attrs, LLMConfig(exclude_models=["gpt-4o"]), []) is None
+    assert scrub_attributes(attrs, LLMConfig(disabled=True), []) is None
+
+
+def test_otlp_exporter_requires_package(monkeypatch):
+    import importlib.util as ilu
+
+    real_find_spec = ilu.find_spec
+    monkeypatch.setattr(
+        ilu,
+        "find_spec",
+        lambda name, *a: None if "exporter" in name else real_find_spec(name, *a),
+    )
+    with pytest.raises(ImportError) as excinfo:
+        _bridge.make_otlp_exporter(owner())
+    assert "opentelemetry-exporter-otlp-proto-http" in str(excinfo.value)
