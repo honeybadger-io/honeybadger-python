@@ -301,7 +301,11 @@ def test_otlp_exporter_keeps_and_redacts_content_when_opted_in(otel_otlp):
     decoded = json.loads(cloned.attributes["gen_ai.input.messages"])
     # ...but is redacted per params_filters (structural redaction by key).
     assert decoded[0]["password"] == "[FILTERED]"
-    assert decoded[0]["parts"][0]["content"] == "secret prompt"
+    # ...and the real nested `parts` shape is flattened to `content` before
+    # the content policy runs, so truncation/part-dropping actually apply
+    # (regression: it used to pass through unprocessed under "parts").
+    assert "parts" not in decoded[0]
+    assert decoded[0]["content"] == "secret prompt"
 
 
 def test_otlp_exporter_drops_excluded_model_spans(otel_otlp):

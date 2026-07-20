@@ -79,3 +79,38 @@ def test_budget_drops_oldest_prompts_first_keeps_system_and_response():
 def test_budget_metadata_only_event_is_untouched():
     data = {"provider": "openai", "model": "gpt-4o"}
     assert enforce_event_budget(dict(data), 10) == data  # nothing droppable
+
+
+def test_budget_drops_response_when_no_prompts_to_drop():
+    data = {
+        "provider": "openai",
+        "response": [{"role": "assistant", "content": "y" * 200}],
+    }
+    result = enforce_event_budget(dict(data), 100)
+    assert result["content_dropped"] is True
+    assert "response" not in result
+    assert result["provider"] == "openai"
+
+
+def test_budget_drops_preserved_system_prompt_when_still_over():
+    prompts = [
+        {"role": "system", "content": "s" * 500},
+        {"role": "user", "content": "hi"},
+    ]
+    data = {"prompts": prompts}
+    result = enforce_event_budget(dict(data), 100)
+    assert result["content_dropped"] is True
+    assert "prompts" not in result
+
+
+def test_budget_drops_prompts_then_response_when_both_needed():
+    data = {
+        "provider": "openai",
+        "prompts": [{"role": "user", "content": "x" * 300}],
+        "response": [{"role": "assistant", "content": "y" * 300}],
+    }
+    result = enforce_event_budget(dict(data), 50)
+    assert result["content_dropped"] is True
+    assert "prompts" not in result
+    assert "response" not in result
+    assert result["provider"] == "openai"  # metadata backstop, untouched

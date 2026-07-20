@@ -100,6 +100,23 @@ def test_export_includes_content_when_opted_in():
     assert data["response"] == [{"role": "assistant", "content": "hello"}]
 
 
+def test_export_budget_accounts_for_lifted_context():
+    # Regression: lifted honeybadger.context.* attributes used to be merged
+    # AFTER enforce_event_budget() ran, so a large context value could push
+    # a "budgeted" event back over max_event_bytes. Lifting must happen
+    # first so the budget check sees the full, final payload.
+    configured(include_prompts=True, include_responses=True, max_event_bytes=200)
+    span = chat_span()
+    span.attributes[CONTEXT_ATTR_PREFIX + "session_id"] = "s" * 300
+    with patch.object(honeybadger, "event") as mock_event:
+        export_spans([span], owner())
+    data = mock_event.call_args[0][1]
+    assert data["session_id"] == "s" * 300  # context still present
+    assert data["content_dropped"] is True  # content sacrificed to fit budget
+    assert "prompts" not in data
+    assert "response" not in data
+
+
 def test_export_respects_independent_flags():
     configured(include_prompts=True, include_responses=False)
     with patch.object(honeybadger, "event") as mock_event:
@@ -450,6 +467,80 @@ def test_scrub_gates_system_instructions_with_prompts():
     assert "gen_ai.system_instructions" in result
     decoded = json.loads(result["gen_ai.system_instructions"])
     assert decoded == [{"type": "text", "content": "be brief"}]
+
+
+def test_scrub_drops_tool_definitions_by_default():
+    attrs = {
+        "gen_ai.request.model": "gpt-4o",
+        "gen_ai.tool.definitions": json.dumps(
+            [{"type": "function", "name": "get_weather", "description": "..."}]
+        ),
+    }
+    result = scrub_attributes(attrs, LLMConfig(), [])
+    assert "gen_ai.tool.definitions" not in result
+    assert attrs["gen_ai.tool.definitions"]  # input untouched
+
+
+def test_scrub_keeps_and_redacts_tool_definitions_when_opted_in():
+    attrs = {
+        "gen_ai.request.model": "gpt-4o",
+        "gen_ai.tool.definitions": json.dumps(
+            [
+                {
+                    "type": "function",
+                    "name": "get_weather",
+                    "description": "...",
+                    "api_key": "hunter2",
+                }
+            ]
+        ),
+    }
+    result = scrub_attributes(attrs, LLMConfig(include_prompts=True), ["api_key"])
+    assert "gen_ai.tool.definitions" in result
+    decoded = json.loads(result["gen_ai.tool.definitions"])
+    assert decoded[0]["api_key"] == "[FILTERED]"
+    assert decoded[0]["name"] == "get_weather"
+
+
+def test_scrub_flattens_nested_parts_and_truncates():
+    from honeybadger.contrib.llm._policy import TRUNCATION_MARKER
+
+    attrs = {
+        "gen_ai.request.model": "gpt-4o",
+        "gen_ai.input.messages": json.dumps(
+            [{"role": "user", "parts": [{"type": "text", "content": "x" * 50}]}]
+        ),
+    }
+    config = LLMConfig(include_prompts=True, max_content_length=10)
+    result = scrub_attributes(attrs, config, [])
+    decoded = json.loads(result["gen_ai.input.messages"])
+    assert "parts" not in decoded[0]
+    assert decoded[0]["content"] == "x" * 10 + TRUNCATION_MARKER
+    assert decoded[0]["role"] == "user"
+
+
+def test_scrub_flattens_nested_parts_omits_non_text():
+    from honeybadger.contrib.llm._policy import OMITTED_PART
+
+    attrs = {
+        "gen_ai.request.model": "gpt-4o",
+        "gen_ai.input.messages": json.dumps(
+            [
+                {
+                    "role": "user",
+                    "parts": [
+                        {"type": "text", "content": "hi"},
+                        {"type": "blob", "data": "AAAA"},
+                    ],
+                }
+            ]
+        ),
+    }
+    config = LLMConfig(include_prompts=True)
+    result = scrub_attributes(attrs, config, [])
+    decoded = json.loads(result["gen_ai.input.messages"])
+    assert "parts" not in decoded[0]
+    assert decoded[0]["content"] == ["hi", OMITTED_PART]
 
 
 def test_otlp_exporter_requires_package(monkeypatch):

@@ -64,23 +64,40 @@ def _size(data: dict) -> int:
 
 
 def enforce_event_budget(data: dict, max_event_bytes: int) -> dict:
-    """Drop prompt messages oldest-first (keeping one leading system message)
-    until the serialized event fits. The response is preserved. Sets
-    content_dropped when anything was removed."""
+    """Hard-cap content against max_event_bytes. Order: drop prompt messages
+    oldest-first (keeping one leading system message) until the event fits;
+    if still over, drop the remaining prompts entirely (including the
+    preserved system message); if still over, drop the response entirely.
+    Metadata-only events that still exceed the budget are left as-is --
+    that's the documented backstop (EventsWorker/API limits apply from
+    there). Sets content_dropped when anything content-related was removed."""
     if _size(data) <= max_event_bytes:
         return data
 
-    prompts = data.get("prompts")
-    if not isinstance(prompts, list) or not prompts:
-        return data  # nothing droppable; EventsWorker/API limits are the backstop
-
-    keep_system = prompts[0] if prompts and prompts[0].get("role") == "system" else None
-    droppable = prompts[1:] if keep_system else list(prompts)
     dropped_any = False
-    while droppable and _size(data) > max_event_bytes:
-        droppable.pop(0)
+
+    prompts = data.get("prompts")
+    if isinstance(prompts, list) and prompts:
+        keep_system = prompts[0] if prompts[0].get("role") == "system" else None
+        droppable = prompts[1:] if keep_system else list(prompts)
+        while droppable and _size(data) > max_event_bytes:
+            droppable.pop(0)
+            dropped_any = True
+            data["prompts"] = ([keep_system] if keep_system else []) + droppable
+        if not data.get("prompts"):
+            # Dropping oldest-first emptied the list (no system message to
+            # preserve, or there never was one) -- drop the key entirely.
+            data.pop("prompts", None)
+        elif _size(data) > max_event_bytes:
+            # Still over budget with only the preserved system message left:
+            # drop it too. Content can no longer keep an event over budget.
+            del data["prompts"]
+            dropped_any = True
+
+    if _size(data) > max_event_bytes and "response" in data:
+        del data["response"]
         dropped_any = True
-        data["prompts"] = ([keep_system] if keep_system else []) + droppable
+
     if dropped_any:
         data["content_dropped"] = True
     return data

@@ -10,7 +10,7 @@ import logging
 from typing import Set
 
 from honeybadger import honeybadger
-from ._semconv import normalize
+from ._semconv import normalize, _flatten_parts
 from ._policy import apply_content_policy, enforce_event_budget
 
 logger = logging.getLogger(__name__)
@@ -63,11 +63,15 @@ def _export_one(span, owner):
         data["response"] = apply_content_policy(
             normalized.response, config.params_filters, llm_config.max_content_length
         )
-    data = enforce_event_budget(data, llm_config.max_event_bytes)
 
+    # Lift honeybadger.context.* BEFORE budgeting so lifted context counts
+    # against max_event_bytes too -- otherwise a large context value could
+    # push the serialized event back over budget after enforcement.
     for key, value in (span.attributes or {}).items():
         if key.startswith(CONTEXT_ATTR_PREFIX):
             data.setdefault(key[len(CONTEXT_ATTR_PREFIX) :], value)
+
+    data = enforce_event_budget(data, llm_config.max_event_bytes)
 
     honeybadger.event(normalized.event_type, data)
 
@@ -125,6 +129,7 @@ def make_events_exporter(owner):
 _CONTENT_ATTRS = {
     "gen_ai.input.messages": "include_prompts",
     "gen_ai.system_instructions": "include_prompts",
+    "gen_ai.tool.definitions": "include_prompts",
     "gen_ai.output.messages": "include_responses",
 }
 
@@ -162,9 +167,24 @@ def _scrub_content_attr(raw, params_filters, max_content_length):
         return _json.dumps("[unparseable content removed]")
     if not isinstance(decoded, list):
         decoded = [decoded]
-    messages = [m if isinstance(m, dict) else {"content": m} for m in decoded]
+    messages = [_normalize_content_entry(m) for m in decoded]
     policied = apply_content_policy(messages, params_filters, max_content_length)
     return _json.dumps(policied, ensure_ascii=False, default=repr)
+
+
+def _normalize_content_entry(entry):
+    """Flatten the instrumentor's real `{"role": ..., "parts": [...]}`
+    message shape into the `{"content": ...}` shape apply_content_policy()
+    understands, reusing the same _flatten_parts() the events path
+    (_semconv.py) uses. Entries without a "parts" key (e.g. the flat
+    part-dicts gen_ai.system_instructions emits) pass through unchanged."""
+    if not isinstance(entry, dict):
+        return {"content": entry}
+    if "parts" not in entry:
+        return entry
+    entry = dict(entry)
+    entry["content"] = _flatten_parts(entry.pop("parts"))
+    return entry
 
 
 def make_otlp_exporter(owner, wrapped=None):
