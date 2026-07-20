@@ -68,12 +68,23 @@ class CeleryConfig:
 
 
 @dataclass
+class LLMConfig:
+    disabled: bool = False
+    include_prompts: bool = False
+    include_responses: bool = False
+    max_content_length: int = 8192  # per content string, chars
+    max_event_bytes: int = 65536  # serialized event budget, UTF-8 bytes
+    exclude_models: List[Union[str, Pattern]] = field(default_factory=list)
+
+
+@dataclass
 class InsightsConfig:
     db: DBConfig = field(default_factory=DBConfig)
     django: DjangoConfig = field(default_factory=DjangoConfig)
     flask: FlaskConfig = field(default_factory=FlaskConfig)
     celery: CeleryConfig = field(default_factory=CeleryConfig)
     asgi: ASGIConfig = field(default_factory=ASGIConfig)
+    llm: LLMConfig = field(default_factory=LLMConfig)
 
 
 @dataclass
