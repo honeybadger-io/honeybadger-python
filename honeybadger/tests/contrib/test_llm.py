@@ -354,3 +354,31 @@ def test_auto_init_thread_safety(monkeypatch):
     # returns the one shared instance afterward, not permanently disabled.
     final = auto_init()
     assert final is shared
+
+
+# --- framework auto-init wiring ---
+
+
+def test_django_middleware_calls_auto_init(monkeypatch):
+    # Follows the established Django test bootstrap in test_django.py:
+    # bare settings.configure() (idempotent), then override_settings for
+    # the specific HONEYBADGER config this test needs.
+    from django.conf import settings as django_settings
+
+    try:
+        django_settings.configure()
+    except RuntimeError:
+        pass
+    from django.test import override_settings
+    from honeybadger.contrib.django import DjangoHoneybadgerMiddleware
+
+    calls = []
+    monkeypatch.setattr(llm_module, "auto_init", lambda: calls.append(1))
+
+    with override_settings(
+        HONEYBADGER={"INSIGHTS_ENABLED": True, "INSIGHTS_CONFIG": {}}
+    ):
+        with patch.object(DjangoHoneybadgerMiddleware, "_patch_cursor"):
+            DjangoHoneybadgerMiddleware(get_response=lambda request: None)
+
+    assert calls == [1]
