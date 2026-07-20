@@ -1,7 +1,7 @@
 # LLM Instrumentation for honeybadger-python — Design
 
 **Date:** 2026-07-11
-**Status:** Draft — revised after Codex review; pending human review
+**Status:** Draft — revised after Codex review and Kevin's review (2026-07-20: phase-1 engine switched from openllmetry to the official OTel instrumentation)
 **Motivating request:** A Django customer asked for "the standard logging: LLM prompts, responses, and token usage." They evaluated PostHog, Pydantic (Logfire), and Raindrop for LLM observability but chose Honeybadger for speed and simplicity of error monitoring — they want LLM monitoring without adopting an all-in-one platform.
 
 ## Goal
@@ -52,26 +52,30 @@ Costs accepted:
 - **Attribute-dialect churn.** See "Attribute dialects" below.
 - **Process-global patches.** See "Ownership and lifecycle" below.
 
-### Attribute dialects and `_semconv.py`
+### Instrumentor selection: official OTel packages
 
-There are (at least) two attribute dialects in the wild, and neither is what loosely gets called "the GenAI semconv":
+**Phase 1 uses the official `opentelemetry-instrumentation-openai-v2` from opentelemetry-python-contrib** (OTel-governed, verified PyPI publisher), not the openllmetry (Traceloop) packages.
 
-- **openllmetry (Traceloop) dialect** — legacy-style span attributes: `gen_ai.system`, `gen_ai.usage.prompt_tokens`/`completion_tokens`, indexed content at `gen_ai.prompt.{n}.content`/`gen_ai.completion.{n}.content`. Content lives on span attributes, readable by an exporter.
-- **Current OTel GenAI conventions** (still incubating) — `gen_ai.provider.name`, `gen_ai.operation.name`, `gen_ai.usage.input_tokens`/`output_tokens`, with input/output messages as JSON-encoded strings (`gen_ai.input.messages`/`gen_ai.output.messages`) and a parallel push to move content onto log events.
+An earlier draft of this spec chose openllmetry for two reasons that have since eroded (verified 2026-07-20, prompted by Kevin's review):
 
-Phase 1 uses the openllmetry instrumentation packages (e.g. `opentelemetry-instrumentation-openai`) because content is span-attribute-accessible and provider coverage is broad. All dialect knowledge lives in `_semconv.py` as **explicitly versioned adapters** — one per dialect, each owning attribute names, JSON decoding, and message-part schemas — not a flat alias table. Every attribute is optional at parse time; events degrade to whatever metadata is present. An adapter for the current OTel conventions is a phase-3+ deliverable (it would let users on the official instrumentors or existing OTel pipelines feed the same bridge).
+1. *Content location.* The official package originally captured message content only as OTel log events, which would have forced the bridge to consume a second signal type. Current releases (2.4b0+) support span-attribute content capture: with `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental`, the `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` env var accepts `span_only` / `event_only` / `span_and_event` — `span_only` puts input/output messages on span attributes where our exporter reads them.
+2. *Coverage.* The contrib repo's GenAI directory now ships official instrumentations for anthropic, google-genai, vertexai, langchain, and openai-agents, so later phases no longer need Traceloop either.
 
-The pinned instrumentor version determines which OpenAI endpoints are covered (Chat Completions is the baseline; **Responses API support must be verified against the pinned version at implementation time and explicitly documented as in or out of scope**). The implementation produces a tested attribute matrix — which schema fields are available per endpoint × sync/async × streaming — and the README documents fields as best-effort.
+With the technical reasons gone, governance decides it: the official packages track the conventions the ecosystem is converging on, under OpenTelemetry governance, while openllmetry emits a legacy dialect owned by a single vendor we'd rather not depend on — betting on it would mean a forced dialect migration later. Both packages are beta; the mitigations below apply regardless.
+
+**Dialects.** `_semconv.py` holds all attribute knowledge as **explicitly versioned adapters** — each owning attribute names, JSON decoding (`gen_ai.input.messages`/`gen_ai.output.messages` are JSON-encoded strings), and message-part schemas — not a flat alias table. Every attribute is optional at parse time; events degrade to whatever metadata is present. Phase 1 ships the current-semconv adapter. An openllmetry-dialect adapter is future work if we ever want to accept spans from users' existing Traceloop setups via the borrowed-provider path.
+
+The pinned instrumentor version determines which OpenAI endpoints are covered (Chat Completions and embeddings are the baseline; **streaming and Responses API support must be verified against the pinned version at implementation time and explicitly documented as in or out of scope** — neither is confirmed in the package docs as of this writing, and a material gap for the motivating customer would reopen the hand-rolled fallback for that path). The implementation produces a tested attribute matrix — which schema fields are available per endpoint × sync/async × streaming — and the README documents fields as best-effort.
 
 ### Content-capture gating
 
-openllmetry gates content capture with the single process-global `TRACELOOP_TRACE_CONTENT` env var (default on), which cannot represent our two independent flags. Rule:
+The official instrumentor gates content capture with two process-global env vars (`OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` to enable the experimental conventions, `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=span_only` for span-attribute content), which cannot represent our two independent flags. Rule:
 
-- If the user has explicitly set `TRACELOOP_TRACE_CONTENT`, we never override it.
-- Otherwise `init()` sets it to true iff `include_prompts or include_responses`.
+- If the user has explicitly set either variable, we never override it.
+- Otherwise `init()` sets `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` and sets capture to `span_only` iff `include_prompts or include_responses` (unset otherwise, so content is never captured into spans that won't emit it).
 - The exporter enforces the two flags independently regardless — prompt attributes are dropped unless `include_prompts`, completion attributes unless `include_responses`.
 
-Documented consequence: the env gate is process-global, so another openllmetry consumer in the same process shares the capture setting.
+Documented consequences: the env gates are process-global, so another OTel GenAI consumer in the same process shares the capture setting; and the `gen_ai_latest_experimental` opt-in means attribute names can move between instrumentor minors — which is why the pin range is narrow and the adapter is versioned.
 
 ### Ownership and lifecycle
 
@@ -109,7 +113,7 @@ Instead of the in-process bridge, the SDK could still auto-load the instrumentor
 
 #### The `export="otlp"` escape hatch
 
-`LLMHoneybadger(export="events")` is the default (the in-process bridge). `export="otlp"` swaps the batch processor's exporter for a stock `OTLPSpanExporter` targeting `{config.endpoint}/v1/traces` with `X-API-Key: {config.api_key}`, for customers who prefer standard OTel-shaped `otel.span` events over our `llm.*` schema (e.g. to match an existing OTel setup or to keep raw span fidelity).
+`LLMHoneybadger(export="events")` is the default (the in-process bridge). `export="otlp"` swaps the batch processor's exporter for a stock `OTLPSpanExporter` targeting `{config.endpoint}/v1/traces` with `X-API-Key: {config.api_key}`, for customers who prefer standard OTel-shaped `otel.span` events over our `llm.*` schema (e.g. to match an existing OTel setup or to keep raw span fidelity). With the official instrumentor these are current-semconv spans — exactly what an OTel-native consumer expects.
 
 - The content policy still applies: a scrubbing wrapper around the exporter rewrites span attributes (part-drop → redact → truncate) per `LLMConfig` before serialization, and `exclude_models`/`disabled` checks still gate export. `ReadableSpan`s are immutable at `on_end`, so scrubbing happens in the wrapper exporter, on copies, at export time — same background thread.
 - Normalization is skipped; no `llm.*` events are emitted in this mode, and the stock LLM dashboard (phase 4) targets `llm.*`, so OTLP-mode customers query `otel.span` themselves. Documented trade-off.
@@ -220,25 +224,25 @@ All fields except `provider` and `duration` are best-effort: presence depends on
 
 ### 5. Packaging
 
-`setup.py` gains an extra whose dependencies carry **environment markers** matching the instrumentor's real floor (Python ≥3.10 as of the current openllmetry releases — to be confirmed against the pins chosen at implementation time):
+`setup.py` gains an extra whose dependencies carry **environment markers** matching the instrumentor's real floor (Python ≥3.10 as of the current `opentelemetry-instrumentation-openai-v2` releases — to be confirmed against the pins chosen at implementation time):
 
 ```python
 extras_require={
     "llm": [
         'opentelemetry-sdk>=1.25,<2; python_version >= "3.10"',
         # narrow, CI-tested range — exact pin range chosen at implementation time:
-        'opentelemetry-instrumentation-openai>=0.52,<0.53; python_version >= "3.10"',
+        'opentelemetry-instrumentation-openai-v2>=2.4b0,<2.5; python_version >= "3.10"',
     ],
 }
 ```
 
-Semantics: `pip install honeybadger[llm]` succeeds everywhere; on interpreters below the floor the marker skips the deps and `LLMHoneybadger().init()` raises `ImportError` naming both the extra and the Python floor. The instrumentor pin range is **narrow** (single minor series) precisely because attribute names move between minors; widening the range is a deliberate, tested act. Implementation should also add the long-missing `python_requires` to `setup.py` for the core package (separate housekeeping, flagged here because packaging tests will touch it). Packaging tests cover install + init on a supported and an unsupported interpreter.
+Semantics: `pip install honeybadger[llm]` succeeds everywhere; on interpreters below the floor the marker skips the deps and `LLMHoneybadger().init()` raises `ImportError` naming both the extra and the Python floor. The instrumentor pin range is **narrow** (single minor series) precisely because the package is beta and the experimental conventions move attribute names between minors; widening the range is a deliberate, tested act. Implementation should also add the long-missing `python_requires` to `setup.py` for the core package (separate housekeeping, flagged here because packaging tests will touch it). Packaging tests cover install + init on a supported and an unsupported interpreter.
 
 ## Data flow
 
 ```
 openai SDK call
-  → openllmetry instrumentor (patches create/stream/async, times the call,
+  → openai-v2 instrumentor (patches create/stream/async, times the call,
     collects usage + content into span attributes)
   → span ends on private TracerProvider
   → BatchSpanProcessor buffers; background thread calls
@@ -265,8 +269,8 @@ openai SDK call
 
 ## Testing
 
-- **Bridge unit tests** (bulk of coverage, run on all CI rows): construct `ReadableSpan`-shaped fakes with openllmetry-style attributes and assert on the emitted event dicts — content policy order (part-drop → redact → truncate → budget), list-aware filtering (and non-mutation of inputs), budget-drop behavior and `content_dropped`, exclude_models semantics (exact string / regex `.search()` / absent model), disabled-at-emit-time, teardown inertness on owned and borrowed providers, malformed-attribute tolerance, multi-byte Unicode around both the char truncation and byte budget boundaries.
-- **Integration tests** (rows where the extra installs): real openllmetry instrumentor + `openai` SDK against a mocked HTTP transport (respx/httpx mock); sync, async, streaming (with/without `include_usage`), early-terminated and failing streams, and error responses, end-to-end into a patched `honeybadger.event`. These tests generate the attribute matrix documented in the maintainer doc.
+- **Bridge unit tests** (bulk of coverage, run on all CI rows): construct `ReadableSpan`-shaped fakes with current-semconv attributes (including JSON-encoded message attributes) and assert on the emitted event dicts — content policy order (part-drop → redact → truncate → budget), list-aware filtering (and non-mutation of inputs), budget-drop behavior and `content_dropped`, exclude_models semantics (exact string / regex `.search()` / absent model), disabled-at-emit-time, teardown inertness on owned and borrowed providers, malformed-attribute tolerance, multi-byte Unicode around both the char truncation and byte budget boundaries.
+- **Integration tests** (rows where the extra installs): real `opentelemetry-instrumentation-openai-v2` instrumentor + `openai` SDK against a mocked HTTP transport (respx/httpx mock); sync, async, streaming (with/without `include_usage`), early-terminated and failing streams, and error responses, end-to-end into a patched `honeybadger.event`. These tests generate the attribute matrix documented in the maintainer doc.
 - **OTLP-mode tests**: the scrubbing wrapper applies the full content policy and `exclude_models`/`disabled` gating to exported spans (asserted against an in-memory OTLP stand-in), original spans are never mutated, and `init(export="otlp")` without the exporter package raises the documented `ImportError`.
 - **Config tests**: `LLMConfig` hydration through `insights_config` dicts, matching `test_config.py` conventions.
 - **Packaging tests**: extra install + `init()` on supported and below-floor interpreters.
@@ -274,9 +278,9 @@ openai SDK call
 
 ## Phasing
 
-1. **Phase 1 — OpenAI.** `LLMHoneybadger`, exporter bridge, `_semconv.py` (openllmetry adapter), `LLMConfig`, `[llm]` extra, `contrib/llm.md` maintainer doc (including the attribute matrix and observed streaming semantics), README section, example app. Answers the motivating customer (Django + the dominant SDK) for the endpoints the pinned instrumentor covers.
-2. **Phase 2 — Anthropic + Bedrock.** Add instrumentor packages to the extra, provider keys to auto-detection, and per-provider quirks to the openllmetry adapter; extend the attribute matrix.
-3. **Phase 3 — Frameworks + official-semconv adapter.** LangChain/LlamaIndex instrumentors; `llm.tool_call` events; **dedup/parent-selection rules for framework spans wrapping already-instrumented provider calls** (a hard prerequisite — without it one logical call emits two events); a `_semconv.py` adapter for the current OTel GenAI conventions; evaluate a small manual API (`@honeybadger.llm_tool`) for custom agent loops.
+1. **Phase 1 — OpenAI.** `LLMHoneybadger`, exporter bridge, `_semconv.py` (current-semconv adapter), `LLMConfig`, `[llm]` extra, `contrib/llm.md` maintainer doc (including the attribute matrix and observed streaming semantics), README section, example app. Answers the motivating customer (Django + the dominant SDK) for the endpoints the pinned instrumentor covers.
+2. **Phase 2 — Anthropic + Bedrock.** Official `opentelemetry-instrumentation-anthropic` (contrib GenAI directory) plus Bedrock via the contrib botocore instrumentation; provider keys added to auto-detection, per-provider quirks to the adapter; extend the attribute matrix.
+3. **Phase 3 — Frameworks.** Official langchain/openai-agents instrumentors from contrib; `llm.tool_call` events; **dedup/parent-selection rules for framework spans wrapping already-instrumented provider calls** (a hard prerequisite — without it one logical call emits two events); evaluate a small manual API (`@honeybadger.llm_tool`) for custom agent loops; optionally an openllmetry-dialect adapter for borrowed-provider users on existing Traceloop setups.
 4. **Phase 4 — Product surface.** Stock "LLM overview" Insights dashboard template (cost by model, latency, error rate, token trends); docs page for the raw-OTLP path for teams with existing OTel pipelines.
 
 ## Resolved questions
@@ -284,4 +288,5 @@ openai SDK call
 1. **Cross-language schema alignment** — resolved: universal `llm.*` schema, as an explicit exception to the per-language event philosophy (rationale in "Event schema"). Analyzer detector and Ruby-gem migration are follow-ups outside this repo.
 2. **Auto-init in framework integrations** — resolved: yes; Django/Flask/ASGI integrations auto-init, matching how the Django integration already auto-patches the DB cursor (details in "Components §1").
 3. **In-process bridge vs. OTLP export** — resolved: in-process bridge as the default engine; no server-side GenAI mapping for now (no current appetite for the collector-side work). Full analysis under "The OTLP-export alternative"; `export="otlp"` ships as an escape hatch, and the emit-target seam keeps the OTLP direction open.
-4. **Cost estimation** — resolved: server-side only. The SDK sends token counts and model name; no `cost` field and no price table in the SDK. Dashboard queries use parameterized token prices so the customer supplies their rates and the query does the math — no maintained price table anywhere. Shapes the phase-4 dashboard template; no impact on SDK phases 1–3.
+4. **Official OTel instrumentation vs. openllmetry (Traceloop)** — resolved (Kevin's review, 2026-07-20): official `opentelemetry-instrumentation-openai-v2`. The original technical reasons for openllmetry (span-attribute content, coverage) no longer hold — the official package now supports `span_only` content capture and the contrib repo covers anthropic/langchain/etc. — and OTel governance beats a single-vendor dependency emitting a legacy dialect. Rationale and verification caveats in "Instrumentor selection."
+5. **Cost estimation** — resolved: server-side only. The SDK sends token counts and model name; no `cost` field and no price table in the SDK. Dashboard queries use parameterized token prices so the customer supplies their rates and the query does the math — no maintained price table anywhere. Shapes the phase-4 dashboard template; no impact on SDK phases 1–3.
