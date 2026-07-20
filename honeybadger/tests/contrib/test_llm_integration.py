@@ -144,6 +144,22 @@ def test_streaming_with_include_usage(llm):
     assert data.get("input_tokens") == 9
 
 
+def test_teardown_flushes_buffered_spans_without_manual_flush(llm):
+    # Regression for silent span drop: tearDown() must flush the owned
+    # provider before flipping self._initialized False, since the exporter
+    # gates on owner.active (see _bridge._export_one). No force_flush() is
+    # called here on purpose -- tearDown() alone must deliver the event.
+    client = openai_client(lambda request: httpx.Response(200, json=CHAT_RESPONSE))
+    with patch.object(honeybadger, "event") as mock_event:
+        client.chat.completions.create(
+            model="gpt-4o", messages=[{"role": "user", "content": "hi"}]
+        )
+        llm.tearDown()
+    assert mock_event.called
+    event_type, data = mock_event.call_args[0]
+    assert event_type == "llm.chat"
+
+
 def test_early_terminated_stream_still_emits(llm):
     chunks = [
         {
