@@ -172,6 +172,7 @@ def test_teardown_flushes_buffered_spans_for_borrowed_provider(monkeypatch):
     # flushing entirely (flush only ran for owned providers), silently
     # dropping any span still sitting in the BatchSpanProcessor's buffer.
     from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 
     monkeypatch.setenv(CONTENT_ENV_VAR, "span_only")
     honeybadger.configure(
@@ -180,9 +181,18 @@ def test_teardown_flushes_buffered_spans_for_borrowed_provider(monkeypatch):
         insights_config={"llm": {"include_prompts": True, "include_responses": True}},
     )
     provider = TracerProvider()
+    # A second, independent processor/exporter on the same borrowed
+    # provider -- proves tearDown() only shuts down OUR processor, not the
+    # provider or its other processors.
+    other_recorder = _RecordingExporter()
+    provider.add_span_processor(SimpleSpanProcessor(other_recorder))
+
     shutdown_mock = patch.object(provider, "shutdown", wraps=provider.shutdown)
     instance = LLMHoneybadger(instruments=["openai"], tracer_provider=provider)
     instance.init()
+    our_worker_thread = instance._processor._batch_processor._worker_thread
+    assert our_worker_thread.is_alive()
+
     client = openai_client(lambda request: httpx.Response(200, json=CHAT_RESPONSE))
     with shutdown_mock as mock_shutdown:
         with patch.object(honeybadger, "event") as mock_event:
@@ -197,10 +207,27 @@ def test_teardown_flushes_buffered_spans_for_borrowed_provider(monkeypatch):
         # Borrowed provider must never be shut down -- it's the app's.
         mock_shutdown.assert_not_called()
 
-        # Inertness: spans ended after tearDown() must not emit. The openai
-        # instrumentor itself is uninstrumented by tearDown(), so drive the
+        # Regression (finding 6): OUR processor's batch-worker thread must
+        # actually stop on tearDown() -- otherwise repeated init/tearDown
+        # against one long-lived borrowed provider accumulates live daemon
+        # threads forever.
+        our_worker_thread.join(timeout=5)
+        assert not our_worker_thread.is_alive()
+
+        # The provider itself, and its OTHER processor, still work fine --
+        # only our processor was shut down.
+        spans_before = len(other_recorder.spans)
+        with tracer_span_on(provider):
+            pass
+        provider.force_flush()
+        assert len(other_recorder.spans) == spans_before + 1
+        assert other_recorder.spans[-1].name == "probe"
+
+        # Inertness: spans ended after tearDown() must not emit through OUR
         # (still physically attached -- no remove_span_processor API)
-        # exporter pipeline directly via the borrowed provider's tracer.
+        # pipeline. The openai instrumentor itself is uninstrumented by
+        # tearDown(), so drive the exporter pipeline directly via the
+        # borrowed provider's tracer.
         with patch.object(honeybadger, "event") as mock_event_after:
             tracer = provider.get_tracer("test-inertness")
             with tracer.start_as_current_span("chat gpt-4o") as span:
@@ -210,6 +237,11 @@ def test_teardown_flushes_buffered_spans_for_borrowed_provider(monkeypatch):
         assert not mock_event_after.called
 
     provider.shutdown()
+
+
+def tracer_span_on(provider):
+    tracer = provider.get_tracer("test-other-processor")
+    return tracer.start_as_current_span("probe")
 
 
 class _RecordingExporter:
