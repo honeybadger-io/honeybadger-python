@@ -3,7 +3,6 @@ HTTP transport, into a patched honeybadger.event. Skipped when the [llm]
 extra isn't installed (Python < 3.10 rows)."""
 
 import json
-import os
 from unittest.mock import patch
 
 import pytest
@@ -13,7 +12,6 @@ openai = pytest.importorskip("openai")
 httpx = pytest.importorskip("httpx")
 
 from honeybadger import honeybadger
-import honeybadger.contrib.llm as llm_module
 from honeybadger.contrib.llm import LLMHoneybadger, CONTENT_ENV_VAR
 
 CHAT_RESPONSE = {
@@ -95,6 +93,7 @@ def test_error_response_end_to_end(llm):
     assert mock_event.called
     data = mock_event.call_args[0][1]
     assert "error" in data
+    assert "RateLimit" in str(data["error"]) or "429" in str(data["error"])
 
 
 def test_streaming_with_include_usage(llm):
@@ -364,3 +363,78 @@ def test_early_terminated_stream_still_emits(llm):
         flush(llm)
     # We emit whatever span arrives (spec: partial output, missing usage OK).
     assert mock_event.called
+    event_type, _data = mock_event.call_args[0]
+    assert event_type == "llm.chat"
+
+
+def test_exception_mid_stream_consumption_still_emits(llm):
+    # Consumer code raising mid-loop (not calling .close()/break itself) is
+    # a realistic failure mode -- e.g. a callback that processes each chunk
+    # throws. Use `with stream:` (openai.Stream supports the context
+    # manager protocol) so the underlying response/span is deterministically
+    # closed on exception propagation, not left to GC (that unconsumed-
+    # generator scenario is deliberately not tested here -- see the plan's
+    # deferral list).
+    chunks = [
+        {
+            "id": "c",
+            "object": "chat.completion.chunk",
+            "created": 1,
+            "model": "gpt-4o",
+            "choices": [{"index": 0, "delta": {"content": "x"}, "finish_reason": None}],
+        },
+    ] * 5
+    body = (
+        "".join("data: %s\n\n" % json.dumps(chunk) for chunk in chunks)
+        + "data: [DONE]\n\n"
+    )
+    client = openai_client(
+        lambda request: httpx.Response(
+            200,
+            content=body.encode(),
+            headers={"content-type": "text/event-stream"},
+        )
+    )
+    with patch.object(honeybadger, "event") as mock_event:
+        try:
+            with client.chat.completions.create(
+                model="gpt-4o",
+                messages=[{"role": "user", "content": "hi"}],
+                stream=True,
+            ) as stream:
+                for i, _ in enumerate(stream):
+                    if i == 0:
+                        raise ValueError("boom")
+        except ValueError:
+            pass
+        flush(llm)
+    assert mock_event.called
+    event_type, data = mock_event.call_args[0]
+    assert event_type == "llm.chat"
+    # Unlike the deliberate-close early-terminated-stream case (no `error`
+    # field), an exception propagating out of the consumer loop is recorded:
+    # confirmed empirically, see contrib/llm.md attribute matrix notes.
+    assert data.get("error") == "ValueError"
+
+
+def test_async_client_chat_completion_end_to_end(llm):
+    import asyncio
+
+    async def _run():
+        transport = httpx.MockTransport(
+            lambda request: httpx.Response(200, json=CHAT_RESPONSE)
+        )
+        client = openai.AsyncOpenAI(
+            api_key="sk-test", http_client=httpx.AsyncClient(transport=transport)
+        )
+        await client.chat.completions.create(
+            model="gpt-4o", messages=[{"role": "user", "content": "hi"}]
+        )
+
+    with patch.object(honeybadger, "event") as mock_event:
+        asyncio.run(_run())
+        flush(llm)
+    assert mock_event.called
+    event_type, data = mock_event.call_args[0]
+    assert event_type == "llm.chat"
+    assert data["model"] == "gpt-4o"

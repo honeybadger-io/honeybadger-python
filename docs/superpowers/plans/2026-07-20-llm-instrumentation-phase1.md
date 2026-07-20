@@ -2217,6 +2217,7 @@ git commit --no-gpg-sign -m "docs(llm): add runnable example app with stub OpenA
 - Anthropic/Bedrock (phase 2), LangChain/agents + `llm.tool_call` (phase 3), dashboard template (phase 4).
 - `llm.embedding` content capture (upstream gap), `report_exceptions` (spec: deferred).
 - Packaging tests on a below-floor interpreter (requires multi-interpreter CI; covered by env markers + the `ImportError` unit test).
+- Abandoned-stream (GC-finalized span) integration test — GC timing makes it inherently flaky; observed behavior documented in contrib/llm.md instead.
 
 ## Self-Review Notes
 
