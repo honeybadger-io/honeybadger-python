@@ -1,10 +1,11 @@
 """Content policy for LLM events. Normative order (spec):
 part-drop -> structural redaction -> per-string truncation -> byte budget.
-All functions are pure with respect to their message inputs.
+apply_content_policy is pure and never mutates its inputs.
+enforce_event_budget mutates and returns the passed event dict in place.
 """
 
 import json
-from typing import List, Optional
+from typing import Optional
 
 from honeybadger.utils import filter_structure
 
@@ -13,7 +14,7 @@ OMITTED_PART = "[non-text content omitted]"
 
 
 def apply_content_policy(
-    messages: Optional[list], filter_keys, max_content_length: int
+    messages: Optional[list], filter_keys: list, max_content_length: int
 ) -> Optional[list]:
     if messages is None:
         return None
