@@ -29,6 +29,7 @@ _INSTRUMENTORS = {
 _active_instance = None
 _auto_instance = None
 _lock = threading.Lock()
+_auto_lock = threading.Lock()
 
 
 def _otel_available():
@@ -127,7 +128,12 @@ class LLMHoneybadger(object):
         if self._initialized:
             return self
         with _lock:
-            if _active_instance is not None and _active_instance is not self:
+            if self._initialized:
+                return self
+            if _active_instance is self:
+                # Another thread is already mid-init on this exact instance.
+                raise RuntimeError("init already in progress")
+            if _active_instance is not None:
                 raise RuntimeError(
                     "another LLMHoneybadger instance is active; tearDown() it first"
                 )
@@ -140,14 +146,15 @@ class LLMHoneybadger(object):
                 )
             self._apply_env_gating()
             provider = self._borrowed_provider or _build_provider()
-            _attach_pipeline(self, provider)
             self._provider = provider
+            _attach_pipeline(self, provider)
             _activate_instrumentors(self, provider)
             self._initialized = True
         except Exception:
             self._cleanup_wiring()
             with _lock:
-                _active_instance = None
+                if _active_instance is self:
+                    _active_instance = None
             raise
         return self
 
@@ -199,18 +206,20 @@ class LLMHoneybadger(object):
 def auto_init():
     """Shared-instance init used by framework integrations. Never raises."""
     global _auto_instance
-    try:
-        if not _otel_available():
+    with _auto_lock:
+        try:
+            if not _otel_available():
+                return None
+            config = honeybadger.config
+            if not config.insights_enabled or config.insights_config.llm.disabled:
+                return None
+            if _active_instance is not None:
+                return _active_instance if _active_instance is _auto_instance else None
+            _auto_instance = LLMHoneybadger()
+            _auto_instance.init()
+            return _auto_instance
+        except Exception as exc:
+            logger.debug("honeybadger llm auto_init skipped: %s", exc)
+            if _active_instance is not _auto_instance:
+                _auto_instance = None
             return None
-        config = honeybadger.config
-        if not config.insights_enabled or config.insights_config.llm.disabled:
-            return None
-        if _active_instance is not None:
-            return _active_instance if _active_instance is _auto_instance else None
-        _auto_instance = LLMHoneybadger()
-        _auto_instance.init()
-        return _auto_instance
-    except Exception as exc:
-        logger.debug("honeybadger llm auto_init skipped: %s", exc)
-        _auto_instance = None
-        return None

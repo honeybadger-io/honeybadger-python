@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import threading
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -285,3 +286,71 @@ def test_auto_init_respects_disabled(monkeypatch):
         insights_config={"llm": {"disabled": True}},
     )
     assert auto_init() is None
+
+
+def test_auto_init_recovers_after_user_instance_teardown(monkeypatch):
+    _fake_otel(monkeypatch)
+    honeybadger.configure(
+        api_key="fake", insights_enabled=True, insights_config={"llm": {}}
+    )
+    user = LLMHoneybadger()
+    user.init()
+    assert auto_init() is None  # a user instance is active; auto_init defers
+    user.tearDown()
+    shared = auto_init()
+    assert shared is not None
+    assert shared.active is True
+    assert auto_init() is shared  # still shared, not permanently disabled
+
+
+def test_init_failure_cleans_up_owned_provider(monkeypatch):
+    fake_provider, _ = _fake_otel(monkeypatch)
+
+    def _boom(self, provider):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(llm_module, "_attach_pipeline", _boom)
+    instance = LLMHoneybadger()
+    with pytest.raises(RuntimeError):
+        instance.init()
+    assert "shutdown" in fake_provider.added  # owned provider was cleaned up
+
+    # Guard released: a fresh instance can init() afterwards.
+    monkeypatch.setattr(llm_module, "_attach_pipeline", lambda self, provider: None)
+    other = LLMHoneybadger()
+    other.init()
+    assert other.active is True
+    other.tearDown()
+
+
+def test_auto_init_thread_safety(monkeypatch):
+    _fake_otel(monkeypatch)
+    honeybadger.configure(
+        api_key="fake", insights_enabled=True, insights_config={"llm": {}}
+    )
+
+    n_threads = 8
+    barrier = threading.Barrier(n_threads)
+    results = [None] * n_threads
+
+    def worker(i):
+        barrier.wait()
+        results[i] = auto_init()
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(n_threads)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    non_none = [r for r in results if r is not None]
+    assert len(non_none) > 0
+    shared = non_none[0]
+    assert all(r is shared for r in non_none)
+    assert shared.active is True
+    assert llm_module._active_instance is shared
+
+    # Every thread that got None must be recoverable: auto_init() still
+    # returns the one shared instance afterward, not permanently disabled.
+    final = auto_init()
+    assert final is shared
