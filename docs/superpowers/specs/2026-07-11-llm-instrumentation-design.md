@@ -1,7 +1,7 @@
 # LLM Instrumentation for honeybadger-python — Design
 
 **Date:** 2026-07-11
-**Status:** Draft — revised after Codex review and Kevin's review (2026-07-20: phase-1 engine switched from openllmetry to the official OTel instrumentation)
+**Status:** Draft — revised after two Codex reviews and Kevin's review (2026-07-20: phase-1 engine switched from openllmetry to the official OTel instrumentation, then to its `genai-openai` successor; context-propagation, schema, and Lambda fixes from second Codex round)
 **Motivating request:** A Django customer asked for "the standard logging: LLM prompts, responses, and token usage." They evaluated PostHog, Pydantic (Logfire), and Raindrop for LLM observability but chose Honeybadger for speed and simplicity of error monitoring — they want LLM monitoring without adopting an all-in-one platform.
 
 ## Goal
@@ -54,28 +54,31 @@ Costs accepted:
 
 ### Instrumentor selection: official OTel packages
 
-**Phase 1 uses the official `opentelemetry-instrumentation-openai-v2` from opentelemetry-python-contrib** (OTel-governed, verified PyPI publisher), not the openllmetry (Traceloop) packages.
+**Phase 1 uses the official `opentelemetry-instrumentation-genai-openai` from opentelemetry-python-contrib** (OTel-governed, verified PyPI publisher), not the openllmetry (Traceloop) packages. This is the successor line to `opentelemetry-instrumentation-openai-v2` — the project was renamed into the `opentelemetry-instrumentation-genai-*` family with 1.0b0 (July 2026). We target the successor, not the discontinued `-v2` series: it applies the latest experimental GenAI conventions unconditionally (no `OTEL_SEMCONV_STABILITY_OPT_IN` needed), instruments chat completions and embeddings (plus Responses API with sync/async streaming wrappers, added late in the `-v2` line), and imports as `opentelemetry.instrumentation.genai.openai.OpenAIInstrumentor`.
+
+⚠️ **Package-provenance trap:** on PyPI, the *unprefixed* names `opentelemetry-instrumentation-anthropic` and `opentelemetry-instrumentation-langchain` are **Traceloop's** packages. The official contrib family is `opentelemetry-instrumentation-genai-*` (`-genai-openai`, `-genai-anthropic`, `-genai-langchain`, `-genai-openai-agents`). Any future dependency addition must check the publisher, not just the name.
 
 An earlier draft of this spec chose openllmetry for two reasons that have since eroded (verified 2026-07-20, prompted by Kevin's review):
 
-1. *Content location.* The official package originally captured message content only as OTel log events, which would have forced the bridge to consume a second signal type. Current releases (2.4b0+) support span-attribute content capture: with `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental`, the `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` env var accepts `span_only` / `event_only` / `span_and_event` — `span_only` puts input/output messages on span attributes where our exporter reads them.
-2. *Coverage.* The contrib repo's GenAI directory now ships official instrumentations for anthropic, google-genai, vertexai, langchain, and openai-agents, so later phases no longer need Traceloop either.
+1. *Content location.* The official package originally captured message content only as OTel log events, which would have forced the bridge to consume a second signal type. The current line supports span-attribute content capture via `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` (`span_only` / `event_only` / `span_and_event` / `no_content`) — `span_only` puts input/output messages on span attributes where our exporter reads them.
+2. *Coverage.* The contrib GenAI family now covers anthropic, google-genai, vertexai, langchain, and openai-agents, so later phases no longer need Traceloop either.
 
-With the technical reasons gone, governance decides it: the official packages track the conventions the ecosystem is converging on, under OpenTelemetry governance, while openllmetry emits a legacy dialect owned by a single vendor we'd rather not depend on — betting on it would mean a forced dialect migration later. Both packages are beta; the mitigations below apply regardless.
+With the technical reasons gone, governance decides it: the official packages track the conventions the ecosystem is converging on, under OpenTelemetry governance, while openllmetry emits a legacy dialect owned by a single vendor we'd rather not depend on — betting on it would mean a forced dialect migration later. Both are beta; the mitigations below apply regardless.
 
-**Dialects.** `_semconv.py` holds all attribute knowledge as **explicitly versioned adapters** — each owning attribute names, JSON decoding (`gen_ai.input.messages`/`gen_ai.output.messages` are JSON-encoded strings), and message-part schemas — not a flat alias table. Every attribute is optional at parse time; events degrade to whatever metadata is present. Phase 1 ships the current-semconv adapter. An openllmetry-dialect adapter is future work if we ever want to accept spans from users' existing Traceloop setups via the borrowed-provider path.
+**Dialects.** `_semconv.py` holds all attribute knowledge as **explicitly versioned adapters** — each owning attribute names, JSON decoding (`gen_ai.input.messages`/`gen_ai.output.messages` are JSON-encoded strings), and message-part schemas — not a flat alias table. Every attribute is optional at parse time; events degrade to whatever metadata is present. Phase 1 ships the current-semconv adapter, built against a **normative attribute→field mapping table** in the maintainer doc (source attribute, event field, fallbacks — including `gen_ai.system_instructions` folding into `prompts` as a `role: "system"` message). An openllmetry-dialect adapter is future work if we ever want to accept spans from users' existing Traceloop setups via the borrowed-provider path.
 
-The pinned instrumentor version determines which OpenAI endpoints are covered (Chat Completions and embeddings are the baseline; **streaming and Responses API support must be verified against the pinned version at implementation time and explicitly documented as in or out of scope** — neither is confirmed in the package docs as of this writing, and a material gap for the motivating customer would reopen the hand-rolled fallback for that path). The implementation produces a tested attribute matrix — which schema fields are available per endpoint × sync/async × streaming — and the README documents fields as best-effort.
+Known coverage limits of the pinned instrumentor, to be re-verified against the exact pin at implementation time: **embedding input content is not captured** (the wrapper records model/dimensions/usage only, so `llm.embedding` carries no content in phase 1), and **provider identification follows the SDK, not the endpoint** — `gen_ai.provider.name` reports per the instrumentor's compatibility mapping, which may misattribute OpenAI-compatible deployments; the event also carries `host` (from `server.address`) so queries can disambiguate. What still needs endpoint-level verification is attribute completeness per mode and stream-cleanup behavior (see Streaming semantics), captured in the tested attribute matrix — which schema fields are available per endpoint × sync/async × streaming — with README documenting fields as best-effort.
 
 ### Content-capture gating
 
-The official instrumentor gates content capture with two process-global env vars (`OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` to enable the experimental conventions, `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=span_only` for span-attribute content), which cannot represent our two independent flags. Rule:
+The instrumentor gates content capture with one process-global env var, `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` (`span_only` / `event_only` / `span_and_event` / `no_content`; default: no capture), which cannot represent our two independent flags. Rules:
 
-- If the user has explicitly set either variable, we never override it.
-- Otherwise `init()` sets `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` and sets capture to `span_only` iff `include_prompts or include_responses` (unset otherwise, so content is never captured into spans that won't emit it).
+- `init()` applies env changes **before** importing/instrumenting (the instrumentor reads the gate at instrument time).
+- If the user has explicitly set the variable, we never override it.
+- Otherwise `init()` sets it to `span_only` iff `include_prompts or include_responses`, and leaves it unset otherwise (the default is already no capture), recording what it set so `tearDown()` restores the prior state.
 - The exporter enforces the two flags independently regardless — prompt attributes are dropped unless `include_prompts`, completion attributes unless `include_responses`.
 
-Documented consequences: the env gates are process-global, so another OTel GenAI consumer in the same process shares the capture setting; and the `gen_ai_latest_experimental` opt-in means attribute names can move between instrumentor minors — which is why the pin range is narrow and the adapter is versioned.
+Documented consequences: the env gate is process-global, so another OTel GenAI consumer in the same process shares the capture setting; and the conventions are experimental, so attribute names can move between instrumentor minors — which is why the pin range is narrow and the adapter is versioned.
 
 ### Ownership and lifecycle
 
@@ -102,10 +105,10 @@ Instead of the in-process bridge, the SDK could still auto-load the instrumentor
 
 **What it would cost.**
 
-- *Query ergonomics.* Customers would query `data.attributes['gen_ai.usage.prompt_tokens']` on generic `otel.span` events — in whichever dialect the pinned instrumentor emits — instead of `input_tokens` on `llm.chat`. For a flagship feature, that is materially worse BadgerQL.
+- *Query ergonomics.* Customers would query `data.attributes['gen_ai.usage.input_tokens']` on generic `otel.span` events — in whichever dialect the pinned instrumentor emits — instead of `input_tokens` on `llm.chat`. For a flagship feature, that is materially worse BadgerQL.
 - *Dialect churn relocates rather than disappears.* Without SDK-side normalization, an instrumentor upgrade that renames attributes breaks every saved query and dashboard, retroactively splitting historical data. The bridge pins that churn inside `_semconv.py`, where one release fixes it.
 - *Fixing the ergonomics properly means server-side GenAI mapping* — teaching the collector/opticon ingestion to recognize GenAI spans and map them into `llm.*` events. That is cross-repo, cross-team work.
-- Smaller items: a new `opentelemetry-exporter-otlp-proto-http` dependency; a second delivery pipeline whose config/failure modes don't inherit `insights_enabled`, `events_sample_rate`, or `before_event`; and Lambda/short-lived-process flush semantics that `EventsWorker.force_sync` already handles.
+- Smaller items: a new `opentelemetry-exporter-otlp-proto-http` dependency; and a second delivery pipeline whose config/failure modes don't inherit `insights_enabled`, `events_sample_rate`, or `before_event`. (Short-lived-runtime flushing is a problem in *both* designs — see the Lambda policy under Error handling — so it doesn't differentiate them.)
 
 **Why it could win long-term.** If the server-side GenAI mapping were built, it would be a one-time fix serving every language SDK *and* every OTel-native customer who never installs our SDK at all — someone running Pydantic AI or the OpenAI Agents SDK with standard OTel would get Honeybadger LLM dashboards just by pointing their exporter at us. Dialect churn would be fixed once, server-side, retroactively — consistent with how we already prefer server-side normalization (the opticon analyzer, server-side cost). The in-process bridge can never offer that.
 
@@ -145,6 +148,8 @@ Follows the Oban contrib shape:
 
 ### 2. `HoneybadgerLLMSpanExporter` — the bridge
 
+**Context crossing.** `honeybadger.event_context()` lives in a `ContextVar` on the request thread; the batch processor's export thread has an empty context, so context cannot be read at emit time. A companion span processor on our provider snapshots the allowed event-context fields onto span attributes at `on_start` (namespaced `honeybadger.context.*`), while the span is still on the calling thread. The exporter lifts them back into the event payload. The same processor serves `export="otlp"` mode (where those attributes ride along on the exported span). Note: the Django integration sets request context; the ASGI integration does not currently set a request ID, so correlation there is whatever `event_context` the app sets.
+
 A `SpanExporter` fed by a `BatchSpanProcessor` (background thread). For each span:
 
 1. Classify by attributes → event type (`llm.chat`, `llm.embedding`, `llm.tool_call`; unrecognized LLM spans → `llm.call`). Non-LLM spans are ignored.
@@ -156,7 +161,7 @@ A `SpanExporter` fed by a `BatchSpanProcessor` (background thread). For each spa
    d. **Event budget** — serialized event capped at `max_event_bytes` (UTF-8); messages are dropped oldest-first (keeping the system prompt and final response when possible) with a `content_dropped: true` flag, so one oversized event can never poison an `EventsWorker` batch.
 4. Apply `exclude_models`: plain strings match the request model **exactly**; compiled regexes match via `.search()`. Absent model → not excluded.
 5. Re-check `insights_config.llm.disabled` and `insights_enabled` at emit time, so flipping config stops events without teardown (Oban pattern).
-6. `honeybadger.event(event_type, data)`. Ambient `event_context` (request ID, user ID — already set by the Django/ASGI/Celery integrations) merges in via the existing `event()` path, giving user/request correlation for free.
+6. `honeybadger.event(event_type, data)`, with the `honeybadger.context.*` snapshot (request ID, user ID) merged into `data`. Correlation fields deliberately avoid names that `event()`'s context merge would collide with — payload keys overwrite context keys in `core.py`, which is also why the schema uses `provider_response_id` rather than `request_id` (see schema).
 
 Failures inside the exporter must never propagate into the OTel pipeline, but must not be invisible either: normalization/serialization failures log a **rate-limited warning** (first occurrence per failure class at `warning`, repeats at `debug`), consistent with `event()`'s error-level logging of `before_event` failures.
 
@@ -200,38 +205,40 @@ All fields except `provider` and `duration` are best-effort: presence depends on
 
 | Field | Type | Notes |
 |---|---|---|
-| `provider` | str | `"openai"`, `"anthropic"`, … |
+| `provider` | str | from `gen_ai.provider.name`; per-SDK, may misattribute OpenAI-compatible endpoints (see coverage limits) |
+| `host` | str | from `server.address`; disambiguates compatible endpoints (Azure, Groq, …) |
 | `model` | str | requested model |
 | `response_model` | str | model the provider actually served, when reported |
 | `duration` | int (ms) | span duration |
 | `input_tokens` / `output_tokens` | int | from usage attributes, when reported |
-| `cached_tokens` | int | when reported |
+| `cache_read_tokens` | int | from `gen_ai.usage.cache_read.input_tokens`, when reported |
+| `cache_creation_tokens` | int | from `gen_ai.usage.cache_creation.input_tokens`, when reported |
 | `streaming` | bool | when determinable from span attributes |
 | `temperature` | float | when set |
 | `finish_reason` | str | when reported |
-| `error` | str | exception type from the span's exception event, falling back to span status description |
-| `prompts` | list | opt-in; `[{role, content}, …]`, post content-policy |
+| `error` | str | extraction order: `error.type` span attribute → exception event's `exception.type` → span status description (the official wrappers set `error.type` via `invocation.fail()` rather than recording exception events) |
+| `prompts` | list | opt-in; `[{role, content}, …]`, post content-policy; `gen_ai.system_instructions` folds in as a `role: "system"` message |
 | `response` | list | opt-in; `[{role, content}, …]` completion message(s), post content-policy |
-| `request_id` | str | provider request ID **if** the instrumentor records it (verify per pinned version) |
+| `provider_response_id` | str | from `gen_ai.response.id` (the completion/response object ID — not an HTTP request ID). Deliberately **not** named `request_id`: payload keys overwrite context keys in `event()`, and `request_id` is Honeybadger's request-correlation field |
 | `trace_id` | str | span's trace ID hex |
 | `content_dropped` | bool | present and true when the event budget dropped messages |
 
 `trace_id` groups calls **only when they already share an OTel trace** — e.g. under a framework instrumentor's parent span in phase 3. Independent SDK calls each start their own trace; for those, correlation comes from `event_context` (request ID), not `trace_id`. The schema makes no stronger promise.
 
-**`llm.embedding`** — `provider`, `model`, `duration`, `input_tokens`, `error`; input content behind `include_prompts`.
+**`llm.embedding`** — `provider`, `host`, `model`, `duration`, `input_tokens`, `error`. **No input content in phase 1**: the official instrumentor does not capture embedding input, so there is nothing to gate behind `include_prompts` (revisit if the instrumentor adds it or if we add our own wrapping).
 
 **`llm.tool_call`** — reserved in the schema for framework instrumentors (LangChain agents) and a possible manual API; not emitted in phase 1.
 
 ### 5. Packaging
 
-`setup.py` gains an extra whose dependencies carry **environment markers** matching the instrumentor's real floor (Python ≥3.10 as of the current `opentelemetry-instrumentation-openai-v2` releases — to be confirmed against the pins chosen at implementation time):
+`setup.py` gains an extra whose dependencies carry **environment markers** matching the instrumentor's real floor (Python ≥3.10 per `opentelemetry-instrumentation-genai-openai` 1.0b0 — to be confirmed against the pins chosen at implementation time):
 
 ```python
 extras_require={
     "llm": [
-        'opentelemetry-sdk>=1.25,<2; python_version >= "3.10"',
+        'opentelemetry-sdk>=1.43,<2; python_version >= "3.10"',
         # narrow, CI-tested range — exact pin range chosen at implementation time:
-        'opentelemetry-instrumentation-openai-v2>=2.4b0,<2.5; python_version >= "3.10"',
+        'opentelemetry-instrumentation-genai-openai>=1.0b0,<1.1; python_version >= "3.10"',
     ],
 }
 ```
@@ -242,7 +249,7 @@ Semantics: `pip install honeybadger[llm]` succeeds everywhere; on interpreters b
 
 ```
 openai SDK call
-  → openai-v2 instrumentor (patches create/stream/async, times the call,
+  → genai-openai instrumentor (patches create/stream/async, times the call,
     collects usage + content into span attributes)
   → span ends on private TracerProvider
   → BatchSpanProcessor buffers; background thread calls
@@ -262,15 +269,16 @@ openai SDK call
 
 ## Error handling
 
-- Provider call fails → instrumentor records an exception event on the span → event carries `error` (exception type; fallback to status description); the exception itself propagates to the app and existing error reporting.
+- Provider call fails → the instrumentor marks the span failed (`error.type` attribute via its `invocation.fail()` path; exception *events* are not reliably recorded) → event carries `error` per the extraction order in the schema; the exception itself propagates to the app and existing error reporting.
+- **Short-lived runtimes (Lambda):** a batch export thread can be frozen mid-flush between invocations, silently losing spans. When `config.is_aws_lambda_environment` is true, `init()` uses a synchronous processor path instead of `BatchSpanProcessor` — span → event on the calling thread, accepting the small hot-path cost, mirroring the intent of the existing Lambda `force_sync` default for notices. (Note `force_sync` itself only affects notice delivery; events have no equivalent today, which is a pre-existing gap this policy works around rather than fixes.)
 - Bridge failure (unexpected attribute shapes, serialization) → caught in the exporter, rate-limited warning as specified above, span dropped.
 - All bridge work happens on the batch processor's background thread; the application thread pays only the instrumentor's attribute-collection cost.
 - `EventsWorker.push()` drops on a full queue (no producer backpressure); an LLM event lost this way is logged by the existing worker paths.
 
 ## Testing
 
-- **Bridge unit tests** (bulk of coverage, run on all CI rows): construct `ReadableSpan`-shaped fakes with current-semconv attributes (including JSON-encoded message attributes) and assert on the emitted event dicts — content policy order (part-drop → redact → truncate → budget), list-aware filtering (and non-mutation of inputs), budget-drop behavior and `content_dropped`, exclude_models semantics (exact string / regex `.search()` / absent model), disabled-at-emit-time, teardown inertness on owned and borrowed providers, malformed-attribute tolerance, multi-byte Unicode around both the char truncation and byte budget boundaries.
-- **Integration tests** (rows where the extra installs): real `opentelemetry-instrumentation-openai-v2` instrumentor + `openai` SDK against a mocked HTTP transport (respx/httpx mock); sync, async, streaming (with/without `include_usage`), early-terminated and failing streams, and error responses, end-to-end into a patched `honeybadger.event`. These tests generate the attribute matrix documented in the maintainer doc.
+- **Bridge unit tests** (bulk of coverage, run on all CI rows): construct `ReadableSpan`-shaped fakes with current-semconv attributes (including JSON-encoded message attributes) and assert on the emitted event dicts — content policy order (part-drop → redact → truncate → budget), list-aware filtering (and non-mutation of inputs), budget-drop behavior and `content_dropped`, exclude_models semantics (exact string / regex `.search()` / absent model), disabled-at-emit-time, teardown inertness on owned and borrowed providers, malformed-attribute tolerance, multi-byte Unicode around both the char truncation and byte budget boundaries, and the `honeybadger.context.*` snapshot surviving the thread hop (context set on the calling thread appears in the emitted event; no leakage between unrelated spans).
+- **Integration tests** (rows where the extra installs): real `opentelemetry-instrumentation-genai-openai` instrumentor + `openai` SDK against a mocked HTTP transport (respx/httpx mock); sync, async, streaming (with/without `include_usage`), early-terminated and failing streams, and error responses, end-to-end into a patched `honeybadger.event`. These tests generate the attribute matrix documented in the maintainer doc.
 - **OTLP-mode tests**: the scrubbing wrapper applies the full content policy and `exclude_models`/`disabled` gating to exported spans (asserted against an in-memory OTLP stand-in), original spans are never mutated, and `init(export="otlp")` without the exporter package raises the documented `ImportError`.
 - **Config tests**: `LLMConfig` hydration through `insights_config` dicts, matching `test_config.py` conventions.
 - **Packaging tests**: extra install + `init()` on supported and below-floor interpreters.
@@ -279,8 +287,8 @@ openai SDK call
 ## Phasing
 
 1. **Phase 1 — OpenAI.** `LLMHoneybadger`, exporter bridge, `_semconv.py` (current-semconv adapter), `LLMConfig`, `[llm]` extra, `contrib/llm.md` maintainer doc (including the attribute matrix and observed streaming semantics), README section, example app. Answers the motivating customer (Django + the dominant SDK) for the endpoints the pinned instrumentor covers.
-2. **Phase 2 — Anthropic + Bedrock.** Official `opentelemetry-instrumentation-anthropic` (contrib GenAI directory) plus Bedrock via the contrib botocore instrumentation; provider keys added to auto-detection, per-provider quirks to the adapter; extend the attribute matrix.
-3. **Phase 3 — Frameworks.** Official langchain/openai-agents instrumentors from contrib; `llm.tool_call` events; **dedup/parent-selection rules for framework spans wrapping already-instrumented provider calls** (a hard prerequisite — without it one logical call emits two events); evaluate a small manual API (`@honeybadger.llm_tool`) for custom agent loops; optionally an openllmetry-dialect adapter for borrowed-provider users on existing Traceloop setups.
+2. **Phase 2 — Anthropic + Bedrock.** Official `opentelemetry-instrumentation-genai-anthropic` plus Bedrock via the contrib botocore instrumentation (mind the provenance trap: the unprefixed anthropic package on PyPI is Traceloop's); provider keys added to auto-detection, per-provider quirks to the adapter; extend the attribute matrix.
+3. **Phase 3 — Frameworks.** Official `opentelemetry-instrumentation-genai-langchain` / `-genai-openai-agents`; `llm.tool_call` events; **dedup/parent-selection rules for framework spans wrapping already-instrumented provider calls** (a hard prerequisite — without it one logical call emits two events); evaluate a small manual API (`@honeybadger.llm_tool`) for custom agent loops; optionally an openllmetry-dialect adapter for borrowed-provider users on existing Traceloop setups.
 4. **Phase 4 — Product surface.** Stock "LLM overview" Insights dashboard template (cost by model, latency, error rate, token trends); docs page for the raw-OTLP path for teams with existing OTel pipelines.
 
 ## Resolved questions
@@ -288,5 +296,5 @@ openai SDK call
 1. **Cross-language schema alignment** — resolved: universal `llm.*` schema, as an explicit exception to the per-language event philosophy (rationale in "Event schema"). Analyzer detector and Ruby-gem migration are follow-ups outside this repo.
 2. **Auto-init in framework integrations** — resolved: yes; Django/Flask/ASGI integrations auto-init, matching how the Django integration already auto-patches the DB cursor (details in "Components §1").
 3. **In-process bridge vs. OTLP export** — resolved: in-process bridge as the default engine; no server-side GenAI mapping for now (no current appetite for the collector-side work). Full analysis under "The OTLP-export alternative"; `export="otlp"` ships as an escape hatch, and the emit-target seam keeps the OTLP direction open.
-4. **Official OTel instrumentation vs. openllmetry (Traceloop)** — resolved (Kevin's review, 2026-07-20): official `opentelemetry-instrumentation-openai-v2`. The original technical reasons for openllmetry (span-attribute content, coverage) no longer hold — the official package now supports `span_only` content capture and the contrib repo covers anthropic/langchain/etc. — and OTel governance beats a single-vendor dependency emitting a legacy dialect. Rationale and verification caveats in "Instrumentor selection."
+4. **Official OTel instrumentation vs. openllmetry (Traceloop)** — resolved (Kevin's review, 2026-07-20): official `opentelemetry-instrumentation-genai-openai` (successor to `-openai-v2`, renamed 2026-07). The original technical reasons for openllmetry (span-attribute content, coverage) no longer hold — the official line supports `span_only` content capture and the contrib GenAI family covers anthropic/langchain/etc. — and OTel governance beats a single-vendor dependency emitting a legacy dialect. Rationale, provenance trap, and verification caveats in "Instrumentor selection."
 5. **Cost estimation** — resolved: server-side only. The SDK sends token counts and model name; no `cost` field and no price table in the SDK. Dashboard queries use parameterized token prices so the customer supplies their rates and the query does the math — no maintained price table anywhere. Shapes the phase-4 dashboard template; no impact on SDK phases 1–3.
