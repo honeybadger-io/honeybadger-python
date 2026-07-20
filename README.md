@@ -426,7 +426,9 @@ honeybadger.configure(
 ```
 
 Django, Flask, and ASGI integrations activate LLM instrumentation
-automatically when the extra is installed. Elsewhere, initialize explicitly:
+automatically when the extra is installed **and** `insights_enabled=True` is
+set in `honeybadger.configure(...)` — auto-init is skipped entirely
+otherwise. Elsewhere, initialize explicitly:
 
 ```python
 from honeybadger.contrib.llm import LLMHoneybadger
@@ -434,11 +436,19 @@ from honeybadger.contrib.llm import LLMHoneybadger
 LLMHoneybadger().init()
 ```
 
+If you configure your own `LLMHoneybadger` instance (e.g. `export="otlp"`
+or a custom `tracer_provider=`), call `.init()` **before** the framework
+integration sets itself up — e.g. in your Django settings module or
+`wsgi.py`, not `AppConfig.ready()` (too late) — since the framework's
+auto-init otherwise claims the single active instance first and your
+explicit `.init()` will raise `RuntimeError`.
+
 Configuration options (under `insights_config["llm"]`): `disabled`,
 `include_prompts`, `include_responses`, `max_content_length` (default 8192
-chars per message), `max_event_bytes` (default 65536), and `exclude_models`
-(exact strings or compiled regexes). Prompt/response content is filtered
-with `params_filters` and truncated before it leaves your process.
+chars per content string), `max_event_bytes` (default 65536), and
+`exclude_models` (exact strings or compiled regexes). Prompt/response
+content is filtered with `params_filters` and truncated before it leaves
+your process.
 
 Notes: streaming OpenAI calls report token usage only when you pass
 `stream_options={"include_usage": True}`; embedding inputs are never
