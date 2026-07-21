@@ -1,0 +1,3 @@
+honeybadger[llm]
+openai>=1.26.0
+flask

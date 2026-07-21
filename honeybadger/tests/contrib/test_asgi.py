@@ -101,3 +101,15 @@ class ASGIEventPayloadTestCase(unittest.TestCase):
         event.assert_called_once()
         name, payload = event.call_args.args
         self.assertEqual(payload["params"], {"x": "1", "y": ["2", "3"]})
+
+    @with_config({"insights_enabled": True})
+    @mock.patch("honeybadger.contrib.llm.auto_init")
+    def test_auto_init_called_when_insights_enabled(self, auto_init):
+        contrib.ASGIHoneybadger(asgi_app(), api_key="abcd", insights_enabled=True)
+        auto_init.assert_called_once()
+
+    @with_config({"insights_enabled": False})
+    @mock.patch("honeybadger.contrib.llm.auto_init")
+    def test_auto_init_not_called_when_insights_disabled(self, auto_init):
+        contrib.ASGIHoneybadger(asgi_app(), api_key="abcd", insights_enabled=False)
+        auto_init.assert_not_called()

@@ -204,6 +204,27 @@ def test_configure_merges_insights_config():
     assert c.insights_config.db.include_params is True
 
 
+def test_llm_config_defaults():
+    c = Configuration()
+    assert c.insights_config.llm.disabled is False
+    assert c.insights_config.llm.include_prompts is False
+    assert c.insights_config.llm.include_responses is False
+    assert c.insights_config.llm.max_content_length == 8192
+    assert c.insights_config.llm.max_event_bytes == 65536
+    assert c.insights_config.llm.exclude_models == []
+
+
+def test_llm_config_hydrates_from_dict():
+    c = Configuration(
+        insights_config={"llm": {"include_prompts": True, "max_content_length": 100}}
+    )
+    assert c.insights_config.llm.include_prompts is True
+    assert c.insights_config.llm.max_content_length == 100
+    # untouched siblings keep defaults
+    assert c.insights_config.llm.include_responses is False
+    assert c.insights_config.db.disabled is False
+
+
 def test_insights_config_has_oban_field():
     from honeybadger.config import InsightsConfig, ObanConfig
 
