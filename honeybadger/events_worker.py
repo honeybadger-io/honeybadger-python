@@ -35,7 +35,7 @@ class EventsWorker:
         self._batches: Deque[Tuple[List[Event], int]] = deque()
 
         self._throttled = False
-        self._stop = False
+        self._stop_event = threading.Event()
         self._dropped = 0
         self._last_drop_log = time.monotonic()
         self._start_time = time.monotonic()
@@ -54,7 +54,7 @@ class EventsWorker:
             self.shutdown()
 
         # Reset state
-        self._stop = False
+        self._stop_event.clear()
 
         self._thread = threading.Thread(
             target=self._run,
@@ -82,17 +82,26 @@ class EventsWorker:
 
     def shutdown(self) -> None:
         self.log.debug("Shutting down events worker")
-        self._stop = True
+        self._stop_event.set()
         self._batch_ready_event.set()  # Wake up the worker thread
 
         if self._thread.is_alive():
-            timeout = (
-                max(
-                    self.config.events_timeout,
-                    self.config.events_throttle_wait,
+            try:
+                # Coerce to float so the result is always numeric — with two
+                # string values, max(str, str) * 2 would "succeed" and hand
+                # join() a string.
+                timeout = (
+                    max(
+                        float(self.config.events_timeout),
+                        float(self.config.events_throttle_wait),
+                    )
+                    * 2
                 )
-                * 2
-            )
+            except (TypeError, ValueError):
+                # Config values may be invalid (e.g. untypecast env vars) —
+                # the worker exits promptly on such errors once stopped, so a
+                # modest fallback join timeout is enough.
+                timeout = 10.0
             self._thread.join(timeout)
         self.log.debug("Events worker stopped")
 
@@ -111,17 +120,35 @@ class EventsWorker:
         Main loop: wait until stop or enough events to batch, then flush.
         """
         while True:
-            # Wait for batch ready signal or timeout
-            self._batch_ready_event.wait(timeout=self._compute_timeout())
-            self._batch_ready_event.clear()
+            try:
+                # Wait for batch ready signal or timeout
+                self._batch_ready_event.wait(timeout=self._compute_timeout())
+                self._batch_ready_event.clear()
 
-            # Check if we should exit (need consistent view of state)
-            with self._lock:
-                if self._stop and not self._queue and not self._batches:
+                # Perform send/retry logic
+                self._flush()
+
+                # Check if we should exit — after flushing, so a drained
+                # shutdown breaks now instead of blocking in one more wait()
+                # (need consistent view of state)
+                with self._lock:
+                    if (
+                        self._stop_event.is_set()
+                        and not self._queue
+                        and not self._batches
+                    ):
+                        break
+            except Exception:
+                # An unexpected error (e.g. a misconfigured timeout value) must
+                # not kill the worker thread — that would silently drop every
+                # future event. Log, then keep the loop alive.
+                self.log.exception("Unexpected error in events worker loop")
+                if self._stop_event.is_set():
                     break
-
-            # Perform send/retry logic
-            self._flush()
+                # Back off to avoid a hot loop on persistent errors, but wait
+                # on the stop event so shutdown() wakes us immediately instead
+                # of returning while we're still asleep.
+                self._stop_event.wait(1.0)
 
     def _flush(self) -> None:
         """
