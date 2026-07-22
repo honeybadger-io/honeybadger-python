@@ -118,7 +118,7 @@ In full: `opentelemetry-instrumentation-botocore==0.65b0` itself pins `opentelem
 
 ## Phase 3: frameworks (LangChain/LangGraph, OpenAI Agents SDK)
 
-Phase 3 extends the same span→event bridge to two framework instrumentors — `opentelemetry-instrumentation-genai-langchain==1.0b0` and `opentelemetry-instrumentation-genai-openai-agents==1.0b0` — so a single agent run appears as a reconstructable tree: `llm.workflow` → `llm.agent` → (`llm.tool_call`, `llm.chat`), joinable via `trace_id`/`span_id`/`parent_span_id`. Evidence for this section is the phase-3 plan's "Empirical findings" (`docs/superpowers/plans/2026-07-22-llm-instrumentation-phase3.md`, probes run against both instrumentors at `1.0b0`), plus the integration suites `honeybadger/tests/contrib/test_llm_langchain.py` and `test_llm_agents.py`.
+Phase 3 extends the same span→event bridge to two framework instrumentors — `opentelemetry-instrumentation-genai-langchain==1.0b0` and `opentelemetry-instrumentation-genai-openai-agents==1.0b0` — so a single agent run appears as a reconstructable tree: `llm.workflow` → `llm.agent` → (`llm.tool_call`, `llm.chat`), joinable via `trace_id`/`span_id`/`parent_span_id`. (Tree reconstruction assumes the framework propagates one shared trace context per run — true for every verified path except async LangChain `ainvoke`, which fragments into per-span traces at this pin; see Limitations.) Evidence for this section is the phase-3 plan's "Empirical findings" (`docs/superpowers/plans/2026-07-22-llm-instrumentation-phase3.md`, probes run against both instrumentors at `1.0b0`), plus the integration suites `honeybadger/tests/contrib/test_llm_langchain.py` and `test_llm_agents.py`.
 
 ### Classification: operation name → event type
 

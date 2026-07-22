@@ -410,7 +410,9 @@ duration, and errors — as Insights events. Supported providers: **OpenAI**,
 **Anthropic**, and **Bedrock** (metadata only — see below). Agent frameworks:
 **LangChain/LangGraph** and the **OpenAI Agents SDK** are also auto-detected
 — a run's events (`llm.workflow`, `llm.agent`, `llm.tool_call`, `llm.chat`)
-share a `trace_id` so you can join them into one run, and `span_id`/
+share a `trace_id` so you can join them into one run (when the framework
+propagates a shared trace context — async LangChain runs currently don't,
+see the limitations doc), and `span_id`/
 `parent_span_id` let you query parentage between them. The exact set and
 shape of events varies by framework and version — see
 [`honeybadger/contrib/llm.md`](honeybadger/contrib/llm.md) for the
