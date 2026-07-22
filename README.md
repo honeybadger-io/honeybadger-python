@@ -407,8 +407,12 @@ database events.
 
 Honeybadger can automatically log your LLM calls — model, token usage,
 duration, and errors — as Insights events. Supported providers: **OpenAI**,
-**Anthropic**, and **Bedrock** (metadata only — see below). Prompts and
-responses are **off by default** and can be enabled with one flag:
+**Anthropic**, and **Bedrock** (metadata only — see below). Agent frameworks:
+**LangChain/LangGraph** and the **OpenAI Agents SDK** are also auto-detected
+— a single agent run appears as `llm.workflow`/`llm.agent`/`llm.tool_call`
+events alongside the existing `llm.chat` events, all joinable into a
+reconstructable run tree via `trace_id`/`span_id`/`parent_span_id`. Prompts
+and responses are **off by default** and can be enabled with one flag:
 
 ```python
 # pip install 'honeybadger[llm]'  (Python 3.10+)
@@ -432,8 +436,8 @@ honeybadger.configure(
 Django, Flask, and ASGI integrations activate LLM instrumentation
 automatically when the extra is installed **and** `insights_enabled=True` is
 set in `honeybadger.configure(...)` — auto-init is skipped entirely
-otherwise. Auto-detection covers OpenAI and Anthropic only. Elsewhere,
-initialize explicitly:
+otherwise. Auto-detection covers OpenAI, Anthropic, LangChain, and the
+OpenAI Agents SDK. Elsewhere, initialize explicitly:
 
 ```python
 from honeybadger.contrib.llm import LLMHoneybadger
@@ -459,6 +463,19 @@ usage, `finish_reason`, and errors are captured for `converse()` and
 instrumentor pin, regardless of `include_prompts`/`include_responses` — see
 [`honeybadger/contrib/llm.md`](honeybadger/contrib/llm.md) for the full
 explanation and evidence.
+
+**OpenAI Agents SDK: the SDK's own trace exporter stays active by default.**
+Instrumenting with Honeybadger does not disable the Agents SDK's built-in
+OpenAI trace exporter — prompts and tool call data keep flowing to OpenAI's
+own trace ingestion regardless of your `include_prompts`/`include_responses`
+settings, unless you opt out explicitly:
+
+```python
+LLMHoneybadger(
+    instruments=["openai_agents", "openai"],
+    instrument_options={"openai_agents": {"disable_openai_trace_export": True}},
+).init()
+```
 
 If you configure your own `LLMHoneybadger` instance (e.g. `export="otlp"`
 or a custom `tracer_provider=`), call `.init()` **before** the framework
