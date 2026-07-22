@@ -29,8 +29,10 @@ class RecordingSpan(FakeSpan):
         self.set_attributes[key] = value
 
 
-def owner(active=True):
-    return SimpleNamespace(active=active)
+def owner(active=True, dedup=None, frameworks=()):
+    return SimpleNamespace(
+        active=active, _dedup=dedup, active_frameworks=tuple(frameworks)
+    )
 
 
 def configured(**llm_overrides):
@@ -756,3 +758,193 @@ def test_otlp_exporter_forwards_only_genai_spans():
     exported = wrapped.get_finished_spans()
     assert len(exported) == 1
     assert dict(exported[0].attributes)["gen_ai.request.model"] == "gpt-4o"
+
+
+# --- chat dedup (response identity LRU) ---
+
+from honeybadger.contrib.llm._bridge import ResponseDedup
+
+
+def dedup_owner(**kwargs):
+    return owner(dedup=ResponseDedup(), **kwargs)
+
+
+def test_dedup_drops_second_chat_span_with_same_response_id():
+    configured()
+    o = dedup_owner()
+    span_a = chat_span(**{"gen_ai.response.id": "chatcmpl-1"})
+    span_b = chat_span(**{"gen_ai.response.id": "chatcmpl-1"})
+    with patch.object(honeybadger, "event") as mock_event:
+        export_spans([span_a, span_b], o)
+    assert mock_event.call_count == 1
+
+
+def test_dedup_scopes_by_trace_id():
+    configured()
+    o = dedup_owner()
+    span_a = chat_span(**{"gen_ai.response.id": "chatcmpl-1"})
+    span_b = chat_span(**{"gen_ai.response.id": "chatcmpl-1"})
+    span_b._ctx.trace_id = 0x99  # different trace: not a duplicate
+    with patch.object(honeybadger, "event") as mock_event:
+        export_spans([span_a, span_b], o)
+    assert mock_event.call_count == 2
+
+
+def test_chat_spans_without_response_id_never_suppressed():
+    configured()
+    o = dedup_owner()
+    with patch.object(honeybadger, "event") as mock_event:
+        export_spans([chat_span(), chat_span()], o)
+    assert mock_event.call_count == 2
+
+
+def test_excluded_event_does_not_suppress_its_twin():
+    # exclusion check runs BEFORE the dedup insert: if the first span is
+    # excluded, the second (same response id, different model) still emits.
+    configured(exclude_models=["gpt-4o"])
+    o = dedup_owner()
+    excluded = chat_span(**{"gen_ai.response.id": "chatcmpl-1"})
+    kept = chat_span(
+        **{"gen_ai.response.id": "chatcmpl-1", "gen_ai.request.model": "gpt-4o-mini"}
+    )
+    with patch.object(honeybadger, "event") as mock_event:
+        export_spans([excluded, kept], o)
+    assert mock_event.call_count == 1
+    assert mock_event.call_args[0][1]["model"] == "gpt-4o-mini"
+
+
+def test_dedup_lru_bound_and_eviction():
+    lru = ResponseDedup(maxsize=2)
+    assert lru.check_and_add(("t", "a")) is False
+    assert lru.check_and_add(("t", "b")) is False
+    assert lru.check_and_add(("t", "c")) is False  # evicts ("t", "a")
+    assert lru.check_and_add(("t", "a")) is False  # evicted -> not seen
+    assert lru.check_and_add(("t", "c")) is True
+
+
+def test_dedup_clear():
+    lru = ResponseDedup()
+    lru.check_and_add(("t", "a"))
+    lru.clear()
+    assert lru.check_and_add(("t", "a")) is False
+
+
+def test_export_works_without_dedup_attribute():
+    # owner without _dedup (phase-1/2 stubs, borrowed cases): no dedup, no crash.
+    configured()
+    with patch.object(honeybadger, "event") as mock_event:
+        export_spans(
+            [chat_span(**{"gen_ai.response.id": "x"})],
+            SimpleNamespace(active=True),
+        )
+    assert mock_event.call_count == 1
+
+
+# --- opaque content gating on framework events ---
+
+
+def tool_span(**attr_overrides):
+    attrs = {
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.tool.name": "get_weather",
+        "gen_ai.tool.call.id": "call_1",
+        "gen_ai.tool.call.arguments": json.dumps({"city": "Paris", "password": "x"}),
+        "gen_ai.tool.call.result": "sunny",
+    }
+    attrs.update(attr_overrides)
+    return FakeSpan(attributes=attrs, name="execute_tool get_weather")
+
+
+def test_tool_content_gated_independently():
+    configured(include_prompts=True, include_responses=False)
+    with patch.object(honeybadger, "event") as mock_event:
+        export_spans([tool_span()], owner())
+    data = mock_event.call_args[0][1]
+    assert data["arguments"]["city"] == "Paris"
+    assert "result" not in data
+
+
+def test_tool_content_redacted_via_opaque_policy():
+    configured(include_prompts=True, include_responses=True)
+    with patch.object(honeybadger, "event") as mock_event:
+        export_spans([tool_span()], owner())
+    data = mock_event.call_args[0][1]
+    assert data["arguments"]["password"] == "[FILTERED]"
+    assert data["result"] == "sunny"
+
+
+def test_tool_content_dropped_by_default():
+    configured()  # both flags default False
+    with patch.object(honeybadger, "event") as mock_event:
+        export_spans([tool_span()], owner())
+    data = mock_event.call_args[0][1]
+    assert "arguments" not in data
+    assert "result" not in data
+    assert data["tool_name"] == "get_weather"
+
+
+def test_workflow_input_output_gated():
+    configured(include_prompts=False, include_responses=True)
+    span = FakeSpan(
+        attributes={
+            "gen_ai.operation.name": "invoke_workflow",
+            "gen_ai.input.messages": json.dumps([{"role": "user"}]),
+            "gen_ai.output.messages": json.dumps([{"role": "assistant"}]),
+        },
+        name="invoke_workflow G",
+    )
+    with patch.object(honeybadger, "event") as mock_event:
+        export_spans([span], owner())
+    data = mock_event.call_args[0][1]
+    assert "input" not in data
+    assert data["output"] == [{"role": "assistant"}]
+
+
+# --- framework attribution ---
+
+
+def test_framework_set_when_single_framework_active():
+    configured()
+    with patch.object(honeybadger, "event") as mock_event:
+        export_spans([tool_span()], owner(frameworks=("langchain",)))
+    assert mock_event.call_args[0][1]["framework"] == "langchain"
+
+
+def test_framework_omitted_when_ambiguous_or_absent():
+    configured()
+    for frameworks in ((), ("langchain", "openai_agents")):
+        with patch.object(honeybadger, "event") as mock_event:
+            export_spans([tool_span()], owner(frameworks=frameworks))
+        assert "framework" not in mock_event.call_args[0][1]
+
+
+def test_framework_never_set_on_chat_events():
+    configured()
+    with patch.object(honeybadger, "event") as mock_event:
+        export_spans([chat_span()], owner(frameworks=("langchain",)))
+    assert "framework" not in mock_event.call_args[0][1]
+
+
+# --- sampling key ---
+
+
+def test_sampling_key_set_to_trace_id():
+    configured()
+    with patch.object(honeybadger, "event") as mock_event:
+        export_spans([chat_span()], owner())
+    data = mock_event.call_args[0][1]
+    assert data["_hb"] == {"sampling_key": data["trace_id"]}
+
+
+def test_sampling_key_omitted_without_trace_id():
+    configured()
+
+    class NoContextSpan(FakeSpan):
+        def get_span_context(self):
+            raise RuntimeError("no context")
+
+    with patch.object(honeybadger, "event") as mock_event:
+        export_spans(
+            [NoContextSpan(attributes={"gen_ai.operation.name": "chat"})], owner()
+        )
+    assert "_hb" not in mock_event.call_args[0][1]

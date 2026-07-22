@@ -7,17 +7,58 @@ and import opentelemetry lazily inside the function bodies.
 """
 
 import logging
+from collections import OrderedDict
 from typing import Set
 
 from honeybadger import honeybadger
-from ._semconv import normalize, _flatten_parts
-from ._policy import apply_content_policy, enforce_event_budget
+from ._semconv import normalize, _flatten_parts, FRAMEWORK_EVENT_TYPES
+from ._policy import (
+    apply_content_policy,
+    apply_opaque_content_policy,
+    enforce_event_budget,
+)
 
 logger = logging.getLogger(__name__)
 
 CONTEXT_ATTR_PREFIX = "honeybadger.context."
 
 _warned_failure_classes: Set[str] = set()
+
+# opaque content key -> gating flag (arguments/input are prompt-side,
+# result/output are response-side)
+_OPAQUE_CONTENT_FLAGS = {
+    "arguments": "include_prompts",
+    "input": "include_prompts",
+    "result": "include_responses",
+    "output": "include_responses",
+}
+
+_DEDUPED_EVENT_TYPES = ("llm.chat", "llm.embedding")
+
+
+class ResponseDedup:
+    """Bounded LRU of (trace_id, provider_response_id) keys already emitted.
+    Best-effort suppression of the double chat spans LangChain produces
+    (its own chat span wraps the provider instrumentor's). NOT thread-safe
+    beyond the GIL; only the export thread touches it."""
+
+    def __init__(self, maxsize=512):
+        self.maxsize = maxsize
+        self._seen = OrderedDict()
+
+    def check_and_add(self, key):
+        """True when key was already emitted (caller drops the event);
+        records the key otherwise."""
+        if key in self._seen:
+            self._seen.move_to_end(key)
+            return True
+        self._seen[key] = True
+        if len(self._seen) > self.maxsize:
+            self._seen.popitem(last=False)
+        return False
+
+    def clear(self):
+        self._seen.clear()
 
 
 def snapshot_context_attributes(span):
@@ -55,6 +96,19 @@ def _export_one(span, owner):
     if _excluded(data.get("model"), llm_config.exclude_models):
         return
 
+    # Response-identity dedup: LangChain emits its own chat span around the
+    # provider instrumentor's for the same model call. Runs AFTER exclusion
+    # (an excluded event must never suppress its twin), BEFORE emit.
+    dedup = getattr(owner, "_dedup", None)
+    if (
+        dedup is not None
+        and normalized.event_type in _DEDUPED_EVENT_TYPES
+        and data.get("provider_response_id")
+        and data.get("trace_id")
+    ):
+        if dedup.check_and_add((data["trace_id"], data["provider_response_id"])):
+            return
+
     if llm_config.include_prompts and normalized.prompts is not None:
         data["prompts"] = apply_content_policy(
             normalized.prompts, config.params_filters, llm_config.max_content_length
@@ -63,6 +117,18 @@ def _export_one(span, owner):
         data["response"] = apply_content_policy(
             normalized.response, config.params_filters, llm_config.max_content_length
         )
+    for key, raw in normalized.content.items():
+        if getattr(llm_config, _OPAQUE_CONTENT_FLAGS[key]):
+            data[key] = apply_opaque_content_policy(
+                raw, config.params_filters, llm_config.max_content_length
+            )
+
+    if normalized.event_type in FRAMEWORK_EVENT_TYPES:
+        frameworks = getattr(owner, "active_frameworks", ()) or ()
+        if len(frameworks) == 1:
+            # Attribution is derivable only when exactly one framework
+            # instrumentor is active; never guess when ambiguous.
+            data["framework"] = frameworks[0]
 
     # Lift honeybadger.context.* BEFORE budgeting so lifted context counts
     # against max_event_bytes too -- otherwise a large context value could
@@ -72,6 +138,11 @@ def _export_one(span, owner):
             data.setdefault(key[len(CONTEXT_ATTR_PREFIX) :], value)
 
     data = enforce_event_budget(data, llm_config.max_event_bytes)
+
+    # After budgeting: _hb is internal metadata (stripped by event()), it
+    # must not count against or be dropped by the content budget.
+    if data.get("trace_id"):
+        data["_hb"] = {"sampling_key": data["trace_id"]}
 
     honeybadger.event(normalized.event_type, data)
 
