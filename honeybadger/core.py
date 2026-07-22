@@ -182,7 +182,10 @@ class Honeybadger(object):
         if sample_rate <= 0:
             return False
 
-        sampling_key = payload.get("request_id")
+        # _hb.sampling_key (set e.g. by the LLM bridge to the run's trace_id
+        # so a whole run samples in or out atomically) takes precedence over
+        # request_id; a fresh UUID (independent sampling) is the fallback.
+        sampling_key = hb_metadata.get("sampling_key") or payload.get("request_id")
         if not sampling_key:
             sampling_key = str(uuid.uuid4())
         hash_value = int(hashlib.md5(sampling_key.encode()).hexdigest(), 16)

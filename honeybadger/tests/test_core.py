@@ -765,3 +765,44 @@ def test_notify_returns_none_when_exception_excluded():
 
         assert mock_send.call_count == 0
         assert result is None
+
+
+def test_event_sampling_key_from_hb_metadata():
+    """Events sharing _hb.sampling_key sample identically (all-or-nothing)."""
+    mock_events_worker = MagicMock()
+    hb = Honeybadger()
+    hb.events_worker = mock_events_worker
+    hb.configure(api_key="aaa", force_report_data=True, events_sample_rate=50)
+
+    # Same sampling_key, different request_ids: identical decision for all.
+    for i in range(10):
+        hb.event(
+            "llm.chat",
+            {
+                "request_id": "req-%d" % i,
+                "_hb": {"sampling_key": "trace-abc"},
+            },
+        )
+    assert mock_events_worker.push.call_count in (0, 10)
+
+    # And the decision matches hashing the sampling_key itself.
+    import hashlib
+
+    expected = (
+        int(hashlib.md5(b"trace-abc").hexdigest(), 16) % 100
+    ) < 50
+    assert (mock_events_worker.push.call_count == 10) == expected
+
+
+def test_event_sampling_key_falls_back_to_request_id():
+    """Without _hb.sampling_key the existing request_id behavior is unchanged."""
+    mock_events_worker = MagicMock()
+    hb = Honeybadger()
+    hb.events_worker = mock_events_worker
+    hb.configure(api_key="aaa", force_report_data=True, events_sample_rate=50)
+
+    import hashlib
+
+    expected = (int(hashlib.md5(b"req-1").hexdigest(), 16) % 100) < 50
+    hb.event("test.event", {"request_id": "req-1"})
+    assert (mock_events_worker.push.call_count == 1) == expected
