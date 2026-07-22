@@ -42,6 +42,8 @@ setup(
             # AND opentelemetry-semantic-conventions==0.65b0, both conflicting with
             # the genai family's ~=0.64b0
             'opentelemetry-instrumentation-botocore==0.64b0; python_version >= "3.10"',
+            'opentelemetry-instrumentation-genai-langchain>=1.0b0,<1.1; python_version >= "3.10"',
+            'opentelemetry-instrumentation-genai-openai-agents>=1.0b0,<1.1; python_version >= "3.10"',
         ],
     },
 )

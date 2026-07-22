@@ -36,9 +36,51 @@ _INSTRUMENTORS = {
         "opentelemetry.instrumentation.botocore",
         "BotocoreInstrumentor",
     ),
+    # Frameworks (phase 3). 4th element = PyPI distribution name: detection
+    # goes through importlib.metadata.version(dist) because the import name
+    # alone is untrustworthy ("agents" is generic; langchain_core is the
+    # real trigger for the langchain callback instrumentor).
+    "langchain": (
+        "langchain_core",
+        "opentelemetry.instrumentation.genai.langchain",
+        "LangChainInstrumentor",
+        "langchain-core",
+    ),
+    "openai_agents": (
+        "agents",
+        "opentelemetry.instrumentation.genai.openai_agents",
+        "OpenAIAgentsInstrumentor",
+        "openai-agents",
+    ),
 }
 
 _EXPLICIT_ONLY = frozenset({"bedrock"})
+_FRAMEWORK_KEYS = frozenset({"langchain", "openai_agents"})
+
+
+def _registry_entry(key):
+    entry = _INSTRUMENTORS[key]
+    if len(entry) == 3:
+        return entry + (None,)
+    return entry
+
+
+def _sdk_available(key):
+    """Is the instrumented SDK importable/installed? dist_name entries verify
+    the installed DISTRIBUTION (import names like "agents" are claimable by
+    any package); 3-tuple entries keep find_spec (no behavior change)."""
+    import importlib.metadata
+    import importlib.util
+
+    sdk_module, _module, _cls, dist_name = _registry_entry(key)
+    if dist_name is not None:
+        try:
+            importlib.metadata.version(dist_name)
+            return True
+        except importlib.metadata.PackageNotFoundError:
+            return False
+    return importlib.util.find_spec(sdk_module) is not None
+
 
 _active_instance = None
 _auto_instance = None
@@ -52,7 +94,7 @@ def _otel_available(requested=None):
             return False
         keys = requested if requested is not None else list(_INSTRUMENTORS)
         for key in keys:
-            _sdk, module_name, _cls = _INSTRUMENTORS[key]
+            _sdk, module_name, _cls, _dist = _registry_entry(key)
             if importlib.util.find_spec(module_name) is not None:
                 return True
         return False
@@ -95,8 +137,8 @@ def _activate_instrumentors(self, provider):
 
     activated = []
     for key in self._requested_instruments():
-        sdk_module, module_name, class_name = _INSTRUMENTORS[key]
-        if importlib.util.find_spec(sdk_module) is None:
+        _sdk_module, module_name, class_name, _dist = _registry_entry(key)
+        if not _sdk_available(key):
             continue
         instrumentor_cls = getattr(importlib.import_module(module_name), class_name)
         instrumentor = instrumentor_cls()
@@ -105,8 +147,33 @@ def _activate_instrumentors(self, provider):
                 "honeybadger llm: %s already instrumented by another consumer; skipping",
                 key,
             )
+            if key in _FRAMEWORK_KEYS:
+                # A foreign consumer already owns this framework's
+                # instrumentor. If we activate a DIFFERENT framework and
+                # borrow the same provider, that foreign framework's spans
+                # can still reach our exporter -- and with only one
+                # framework key in self._instrumentors, active_frameworks
+                # would otherwise (wrongly) attribute them to the one we DID
+                # activate. `framework` must never be guessed wrong in
+                # preference to being omitted (spec), so once this is
+                # detected we omit `framework` entirely for the rest of this
+                # instance's lifetime.
+                self._foreign_framework_detected = True
             continue
-        instrumentor.instrument(tracer_provider=provider)
+        if key in _FRAMEWORK_KEYS and not self._activated_framework:
+            # Framework instrumentors share the util-genai TelemetryHandler
+            # singleton; record whether one pre-exists so tearDown only
+            # clears what OUR init created (see _release_genai_singleton).
+            self._saw_genai_singleton = _genai_singleton_exists()
+            self._activated_framework = True
+            if self._saw_genai_singleton:
+                logger.warning(
+                    "honeybadger llm: a util-genai TelemetryHandler already "
+                    "exists; framework spans may be routed to another "
+                    "consumer's tracer provider, not Honeybadger's"
+                )
+        kwargs = dict((self.instrument_options or {}).get(key) or {})
+        instrumentor.instrument(tracer_provider=provider, **kwargs)
         self._instrumentors[key] = instrumentor
         activated.append(key)
     return activated
@@ -121,24 +188,79 @@ def _deactivate_instrumentors(self):
         self._instrumentors.pop(key, None)
 
 
+def _genai_singleton_exists():
+    try:
+        from opentelemetry.util.genai.handler import get_telemetry_handler
+    except ImportError:
+        return False
+    return getattr(get_telemetry_handler, "_default_handler", None) is not None
+
+
+def _release_genai_singleton(self):
+    """Clear the util-genai TelemetryHandler singleton iff our init created
+    it. Framework instrumentors bind the singleton's tracer to whichever
+    provider existed at FIRST creation; without this, tearDown + re-init
+    with only openai_agents (whose uninstrument does NOT clear it, unlike
+    langchain's) would silently pipe all framework spans to the dead
+    provider."""
+    if not getattr(self, "_activated_framework", False):
+        return
+    if getattr(self, "_saw_genai_singleton", True):
+        return  # pre-existing singleton is someone else's; leave it
+    try:
+        from opentelemetry.util.genai.handler import get_telemetry_handler
+    except ImportError:
+        return
+    if hasattr(get_telemetry_handler, "_default_handler"):
+        delattr(get_telemetry_handler, "_default_handler")
+
+
 class LLMHoneybadger(object):
-    def __init__(self, instruments=None, tracer_provider=None, export="events"):
+    def __init__(
+        self,
+        instruments=None,
+        tracer_provider=None,
+        export="events",
+        instrument_options=None,
+    ):
         if export not in _EXPORT_MODES:
             raise ValueError(
                 "export must be one of %r, got %r" % (_EXPORT_MODES, export)
             )
+        unknown = set(instrument_options or {}) - set(_INSTRUMENTORS)
+        if unknown:
+            # A typo'd/unknown key (e.g. "openai-agents" instead of
+            # "openai_agents") would otherwise be silently ignored -- a
+            # privacy foot-gun, since instrument_options is how callers
+            # disable things like the Agents SDK's native trace export.
+            raise ValueError("unknown instrument_options keys: %s" % sorted(unknown))
         self.instruments = instruments
         self.export = export
+        self.instrument_options = instrument_options
         self._borrowed_provider = tracer_provider
         self._provider = None
         self._processor = None
         self._instrumentors = {}
         self._initialized = False
         self._env_was_set_by_us = False
+        self._dedup = _bridge.ResponseDedup()
+        self._saw_genai_singleton = False
+        self._activated_framework = False
+        self._foreign_framework_detected = False
 
     @property
     def active(self):
         return self._initialized
+
+    @property
+    def active_frameworks(self):
+        if self._foreign_framework_detected:
+            # A framework instrumentor we did NOT activate (pre-instrumented
+            # by another consumer) may still be producing spans that reach
+            # our exporter. Any single-framework attribution we'd otherwise
+            # report could be wrong, so we omit rather than guess.
+            return ()
+        return tuple(k for k in self._instrumentors if k in _FRAMEWORK_KEYS)
 
     def _requested_instruments(self):
         if self.instruments is not None:
@@ -238,6 +360,7 @@ class LLMHoneybadger(object):
 
     def _cleanup_wiring(self):
         _deactivate_instrumentors(self)
+        _release_genai_singleton(self)
         self._restore_env_gating()
         if self._provider is not None and self._borrowed_provider is None:
             # Owned provider: flush + shutdown. Borrowed: leave attached,
@@ -267,6 +390,10 @@ class LLMHoneybadger(object):
                 )
         self._provider = None
         self._processor = None
+        self._dedup.clear()
+        self._activated_framework = False
+        self._saw_genai_singleton = False
+        self._foreign_framework_detected = False
 
 
 def auto_init():

@@ -59,12 +59,50 @@ def _truncate_message(message, max_length: int):
     return message
 
 
+def apply_opaque_content_policy(value, filter_keys: list, max_content_length: int):
+    """Policy for any-typed opaque content (tool arguments/results, workflow
+    input/output). JSON-decode when the value is a JSON string, key-redact
+    any structure, truncate EVERY string leaf (not just "content" keys).
+    Pure -- never mutates its input. Returns a JSON-serializable value."""
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (ValueError, TypeError):
+            pass  # plain string content: truncate below
+    if isinstance(value, tuple):
+        # OTel stores sequence-valued attrs as tuples; without this a
+        # top-level tuple would skip both filter_structure() (redaction)
+        # and the isinstance(value, list) check in _truncate_string_leaves,
+        # bypassing the policy entirely.
+        value = list(value)
+    if isinstance(value, (dict, list)):
+        value = filter_structure(value, filter_keys)
+    return _truncate_string_leaves(value, max_content_length)
+
+
+def _truncate_string_leaves(value, max_length: int):
+    if isinstance(value, str):
+        if len(value) > max_length:
+            return value[:max_length] + TRUNCATION_MARKER
+        return value
+    if isinstance(value, list):
+        return [_truncate_string_leaves(item, max_length) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: _truncate_string_leaves(item, max_length)
+            for key, item in value.items()
+        }
+    return value
+
+
 def _size(data: dict) -> int:
     return len(json.dumps(data, ensure_ascii=False, default=repr).encode("utf-8"))
 
 
 def enforce_event_budget(data: dict, max_event_bytes: int) -> dict:
-    """Hard-cap content against max_event_bytes. Order: drop prompt messages
+    """Hard-cap content against max_event_bytes. Order: drop opaque framework
+    content first (arguments → result → input → output in that fixed order,
+    stopping as soon as the event fits) → then drop prompt messages
     oldest-first (keeping one leading system message) until the event fits;
     if still over, drop the remaining prompts entirely (including the
     preserved system message); if still over, drop the response entirely.
@@ -75,6 +113,14 @@ def enforce_event_budget(data: dict, max_event_bytes: int) -> dict:
         return data
 
     dropped_any = False
+
+    # Opaque framework content drops first, in fixed order (spec).
+    for key in ("arguments", "result", "input", "output"):
+        if _size(data) <= max_event_bytes:
+            break
+        if key in data:
+            del data[key]
+            dropped_any = True
 
     prompts = data.get("prompts")
     if isinstance(prompts, list) and prompts:
