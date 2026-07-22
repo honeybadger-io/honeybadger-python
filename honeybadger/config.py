@@ -68,6 +68,13 @@ class CeleryConfig:
 
 
 @dataclass
+class ObanConfig:
+    disabled: bool = False
+    exclude_workers: List[Union[str, Pattern]] = field(default_factory=list)
+    include_args: bool = False
+
+
+@dataclass
 class LLMConfig:
     disabled: bool = False
     include_prompts: bool = False
@@ -84,6 +91,7 @@ class InsightsConfig:
     flask: FlaskConfig = field(default_factory=FlaskConfig)
     celery: CeleryConfig = field(default_factory=CeleryConfig)
     asgi: ASGIConfig = field(default_factory=ASGIConfig)
+    oban: ObanConfig = field(default_factory=ObanConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
 
 
@@ -151,6 +159,8 @@ class Configuration(BaseConfig):
                         val = env_val.split(",")
                     elif typ == int:
                         val = int(env_val)
+                    elif typ == float:
+                        val = float(env_val)
                     elif typ == bool:
                         val = env_val.lower() in ("true", "1", "yes")
                     else:

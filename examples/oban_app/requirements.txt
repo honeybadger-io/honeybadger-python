@@ -1,0 +1,2 @@
+oban==0.6.2
+# Use the in-repo honeybadger build via `pip install -e ../..` instead of pinning here.

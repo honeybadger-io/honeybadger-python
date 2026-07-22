@@ -37,6 +37,27 @@ def test_config_bool_types_are_accurate():
     assert c.force_report_data == True
 
 
+def test_config_float_types_are_accurate():
+    os.environ["HONEYBADGER_EVENTS_TIMEOUT"] = "2.5"
+    os.environ["HONEYBADGER_EVENTS_THROTTLE_WAIT"] = "30"
+    try:
+        c = Configuration()
+    finally:
+        del os.environ["HONEYBADGER_EVENTS_TIMEOUT"]
+        del os.environ["HONEYBADGER_EVENTS_THROTTLE_WAIT"]
+    assert c.events_timeout == 2.5
+    assert c.events_throttle_wait == 30.0
+
+
+def test_config_invalid_float_env_var_keeps_default():
+    os.environ["HONEYBADGER_EVENTS_TIMEOUT"] = "not-a-number"
+    try:
+        c = Configuration()
+    finally:
+        del os.environ["HONEYBADGER_EVENTS_TIMEOUT"]
+    assert c.events_timeout == 5.0
+
+
 def test_can_only_set_valid_options(caplog):
     with caplog.at_level(logging.WARNING):
         try:
@@ -202,3 +223,23 @@ def test_llm_config_hydrates_from_dict():
     # untouched siblings keep defaults
     assert c.insights_config.llm.include_responses is False
     assert c.insights_config.db.disabled is False
+
+
+def test_insights_config_has_oban_field():
+    from honeybadger.config import InsightsConfig, ObanConfig
+
+    cfg = InsightsConfig()
+    assert isinstance(cfg.oban, ObanConfig)
+    assert cfg.oban.disabled is False
+    assert cfg.oban.exclude_workers == []
+    assert cfg.oban.include_args is False
+
+
+def test_oban_config_accepts_exclude_workers_patterns():
+    import re
+    from honeybadger.config import ObanConfig
+
+    cfg = ObanConfig(
+        exclude_workers=["myapp.LowPriorityWorker", re.compile(r"^cron\.")]
+    )
+    assert len(cfg.exclude_workers) == 2

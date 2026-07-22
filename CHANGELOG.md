@@ -3,6 +3,27 @@ All notable changes to this project will be documented in this file. See [Keep a
 CHANGELOG](http://keepachangelog.com/) for how to update this file. This project
 adheres to [Semantic Versioning](http://semver.org/).
 
+## [1.3.0](https://github.com/honeybadger-io/honeybadger-python/compare/v1.2.4...v1.3.0) (2026-07-20)
+
+
+### Features
+
+* add support for Oban ([#261](https://github.com/honeybadger-io/honeybadger-python/issues/261)) ([bfc0eb0](https://github.com/honeybadger-io/honeybadger-python/commit/bfc0eb0e5bab491a37c6a45c1358824a83a1991a))
+
+## [1.2.4](https://github.com/honeybadger-io/honeybadger-python/compare/v1.2.3...v1.2.4) (2026-07-03)
+
+
+### Bug Fixes
+
+* **config:** typecast float env vars; keep events worker alive on bad config ([#266](https://github.com/honeybadger-io/honeybadger-python/issues/266)) ([4b6eac3](https://github.com/honeybadger-io/honeybadger-python/commit/4b6eac36090e96ecb356d98d1b1263dfebf12e70))
+
+## [1.2.3](https://github.com/honeybadger-io/honeybadger-python/compare/v1.2.2...v1.2.3) (2026-05-29)
+
+
+### Bug Fixes
+
+* project_root="/" mangling backtrace file paths ([#262](https://github.com/honeybadger-io/honeybadger-python/issues/262)) ([bd7caa0](https://github.com/honeybadger-io/honeybadger-python/commit/bd7caa07d8b4fb1421046f88a119d6b99053bbd7))
+
 ## [1.2.2](https://github.com/honeybadger-io/honeybadger-python/compare/v1.2.1...v1.2.2) (2026-04-16)
 
 
