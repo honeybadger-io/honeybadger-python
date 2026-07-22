@@ -6,6 +6,7 @@ No opentelemetry imports — operates on the ReadableSpan duck-type
 (attributes, events, status, start_time, end_time, get_span_context).
 """
 
+import datetime
 import json
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
@@ -31,7 +32,34 @@ _SCALAR_FIELDS = {
     "gen_ai.usage.cache_creation.input_tokens": "cache_creation_tokens",
     "gen_ai.request.temperature": "temperature",
     "gen_ai.response.id": "provider_response_id",
+    "gen_ai.conversation.id": "conversation_id",
 }
+
+
+def _span_id(span) -> Optional[str]:
+    try:
+        return format(span.get_span_context().span_id, "016x")
+    except Exception:
+        return None
+
+
+def _parent_span_id(span) -> Optional[str]:
+    parent = getattr(span, "parent", None)
+    if parent is None:
+        return None
+    try:
+        return format(parent.span_id, "016x")
+    except Exception:
+        return None
+
+
+def _start_ts(span) -> Optional["datetime.datetime"]:
+    start = getattr(span, "start_time", None)
+    if start is None:
+        return None
+    return datetime.datetime.fromtimestamp(
+        start / 1_000_000_000, datetime.timezone.utc
+    )
 
 
 @dataclass
@@ -73,6 +101,16 @@ def normalize(span) -> Optional[NormalizedLLMSpan]:
     trace_id = _trace_id(span)
     if trace_id:
         data["trace_id"] = trace_id
+
+    span_id = _span_id(span)
+    if span_id:
+        data["span_id"] = span_id
+    parent_span_id = _parent_span_id(span)
+    if parent_span_id:
+        data["parent_span_id"] = parent_span_id
+    ts = _start_ts(span)
+    if ts is not None:
+        data["ts"] = ts
 
     error = _extract_error(span, attributes)
     if error:

@@ -30,6 +30,9 @@ class FakeSpan:
         start_time=1_000_000_000,
         end_time=2_234_000_000,
         name="chat gpt-4o",
+        parent=None,
+        trace_id=0x1F,
+        span_id=0x2,
     ):
         self.attributes = attributes or {}
         self.events = events or []
@@ -37,7 +40,8 @@ class FakeSpan:
         self.start_time = start_time  # ns
         self.end_time = end_time  # ns
         self.name = name
-        self._ctx = FakeSpanContext()
+        self.parent = parent  # SpanContext duck-type (FakeSpanContext) or None
+        self._ctx = FakeSpanContext(trace_id=trace_id, span_id=span_id)
 
     def get_span_context(self):
         return self._ctx

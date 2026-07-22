@@ -168,3 +168,62 @@ def test_normalize_classifies_embeddings_and_unknown():
 
     not_llm = FakeSpan(attributes={"http.method": "GET"})
     assert normalize(not_llm) is None
+
+
+def test_span_id_and_parent_span_id_extracted():
+    from honeybadger.tests.contrib.llm_helpers import FakeSpanContext
+
+    span = FakeSpan(
+        attributes={"gen_ai.operation.name": "chat"},
+        span_id=0xABC,
+        parent=FakeSpanContext(span_id=0xDEF),
+    )
+    result = normalize(span)
+    assert result.data["span_id"] == format(0xABC, "016x")
+    assert result.data["parent_span_id"] == format(0xDEF, "016x")
+
+
+def test_parent_span_id_omitted_for_root_spans():
+    span = FakeSpan(attributes={"gen_ai.operation.name": "chat"}, parent=None)
+    result = normalize(span)
+    assert "parent_span_id" not in result.data
+
+
+def test_ts_set_from_span_start_time():
+    import datetime
+
+    span = FakeSpan(
+        attributes={"gen_ai.operation.name": "chat"},
+        start_time=1_700_000_000_000_000_000,  # ns
+    )
+    result = normalize(span)
+    assert result.data["ts"] == datetime.datetime.fromtimestamp(
+        1_700_000_000, datetime.timezone.utc
+    )
+
+
+def test_ts_omitted_when_no_start_time():
+    span = FakeSpan(attributes={"gen_ai.operation.name": "chat"}, start_time=None)
+    result = normalize(span)
+    assert "ts" not in result.data
+
+
+def test_conversation_id_mapped_when_present():
+    span = FakeSpan(
+        attributes={
+            "gen_ai.operation.name": "chat",
+            "gen_ai.conversation.id": "thread-42",
+        }
+    )
+    result = normalize(span)
+    assert result.data["conversation_id"] == "thread-42"
+
+
+def test_span_ids_survive_broken_context():
+    class NoContextSpan(FakeSpan):
+        def get_span_context(self):
+            raise RuntimeError("boom")
+
+    result = normalize(NoContextSpan(attributes={"gen_ai.operation.name": "chat"}))
+    assert "span_id" not in result.data
+    assert "trace_id" not in result.data
