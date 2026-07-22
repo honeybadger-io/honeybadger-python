@@ -409,10 +409,13 @@ Honeybadger can automatically log your LLM calls — model, token usage,
 duration, and errors — as Insights events. Supported providers: **OpenAI**,
 **Anthropic**, and **Bedrock** (metadata only — see below). Agent frameworks:
 **LangChain/LangGraph** and the **OpenAI Agents SDK** are also auto-detected
-— a single agent run appears as `llm.workflow`/`llm.agent`/`llm.tool_call`
-events alongside the existing `llm.chat` events, all joinable into a
-reconstructable run tree via `trace_id`/`span_id`/`parent_span_id`. Prompts
-and responses are **off by default** and can be enabled with one flag:
+— a run's events (`llm.workflow`, `llm.agent`, `llm.tool_call`, `llm.chat`)
+share a `trace_id` so you can join them into one run, and `span_id`/
+`parent_span_id` let you query parentage between them. The exact set and
+shape of events varies by framework and version — see
+[`honeybadger/contrib/llm.md`](honeybadger/contrib/llm.md) for the
+per-framework matrices and known limitations. Prompts and responses are
+**off by default** and can be enabled with one flag:
 
 ```python
 # pip install 'honeybadger[llm]'  (Python 3.10+)

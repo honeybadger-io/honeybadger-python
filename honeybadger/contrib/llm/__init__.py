@@ -147,6 +147,18 @@ def _activate_instrumentors(self, provider):
                 "honeybadger llm: %s already instrumented by another consumer; skipping",
                 key,
             )
+            if key in _FRAMEWORK_KEYS:
+                # A foreign consumer already owns this framework's
+                # instrumentor. If we activate a DIFFERENT framework and
+                # borrow the same provider, that foreign framework's spans
+                # can still reach our exporter -- and with only one
+                # framework key in self._instrumentors, active_frameworks
+                # would otherwise (wrongly) attribute them to the one we DID
+                # activate. `framework` must never be guessed wrong in
+                # preference to being omitted (spec), so once this is
+                # detected we omit `framework` entirely for the rest of this
+                # instance's lifetime.
+                self._foreign_framework_detected = True
             continue
         if key in _FRAMEWORK_KEYS and not self._activated_framework:
             # Framework instrumentors share the util-genai TelemetryHandler
@@ -234,6 +246,7 @@ class LLMHoneybadger(object):
         self._dedup = _bridge.ResponseDedup()
         self._saw_genai_singleton = False
         self._activated_framework = False
+        self._foreign_framework_detected = False
 
     @property
     def active(self):
@@ -241,6 +254,12 @@ class LLMHoneybadger(object):
 
     @property
     def active_frameworks(self):
+        if self._foreign_framework_detected:
+            # A framework instrumentor we did NOT activate (pre-instrumented
+            # by another consumer) may still be producing spans that reach
+            # our exporter. Any single-framework attribution we'd otherwise
+            # report could be wrong, so we omit rather than guess.
+            return ()
         return tuple(k for k in self._instrumentors if k in _FRAMEWORK_KEYS)
 
     def _requested_instruments(self):
@@ -374,6 +393,7 @@ class LLMHoneybadger(object):
         self._dedup.clear()
         self._activated_framework = False
         self._saw_genai_singleton = False
+        self._foreign_framework_detected = False
 
 
 def auto_init():

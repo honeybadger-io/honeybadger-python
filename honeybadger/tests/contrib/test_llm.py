@@ -821,6 +821,57 @@ def test_otlp_exporter_forwards_only_genai_spans():
     assert dict(exported[0].attributes)["gen_ai.request.model"] == "gpt-4o"
 
 
+# --- workflow content opaque scrub (OTLP) ---
+
+
+def test_scrub_workflow_input_output_uses_opaque_policy_truncation():
+    # Workflow spans reuse the message-shaped attr names but carry opaque
+    # (any-JSON-shape) content, not a chat message list -- a long string
+    # leaf NOT under a "content" key must still be truncated by the opaque
+    # policy (the message-shaped policy only truncates "content"-keyed
+    # strings, so this pins that the workflow branch is NOT using it).
+    configured(include_prompts=True, include_responses=True, max_content_length=5)
+    llm_config = honeybadger.config.insights_config.llm
+    attrs = {
+        "gen_ai.operation.name": "invoke_workflow",
+        "gen_ai.input.messages": json.dumps({"task": "a very long task description"}),
+    }
+    result = _bridge.scrub_attributes(attrs, llm_config, [])
+    decoded = json.loads(result["gen_ai.input.messages"])
+    assert decoded["task"] == "a ver... [TRUNCATED]"
+
+
+def test_scrub_workflow_input_output_redacts_filter_keys():
+    configured(include_prompts=True, include_responses=True)
+    llm_config = honeybadger.config.insights_config.llm
+    attrs = {
+        "gen_ai.operation.name": "invoke_workflow",
+        "gen_ai.output.messages": json.dumps({"result": "ok", "api_key": "hunter2"}),
+    }
+    result = _bridge.scrub_attributes(attrs, llm_config, ["api_key"])
+    decoded = json.loads(result["gen_ai.output.messages"])
+    assert decoded["api_key"] == "[FILTERED]"
+    assert decoded["result"] == "ok"
+
+
+def test_scrub_chat_span_messages_still_use_message_policy():
+    # Pin existing behavior: chat spans (operation.name != invoke_workflow)
+    # keep routing gen_ai.input.messages/gen_ai.output.messages through the
+    # message-shaped policy (parts flattened to "content", non-"content"
+    # keys not truncation targets).
+    configured(include_prompts=True)
+    llm_config = honeybadger.config.insights_config.llm
+    attrs = {
+        "gen_ai.operation.name": "chat",
+        "gen_ai.input.messages": json.dumps(
+            [{"role": "user", "parts": [{"type": "text", "content": "hi"}]}]
+        ),
+    }
+    result = _bridge.scrub_attributes(attrs, llm_config, [])
+    decoded = json.loads(result["gen_ai.input.messages"])
+    assert decoded == [{"role": "user", "content": "hi"}]
+
+
 # --- chat dedup (response identity LRU) ---
 
 from honeybadger.contrib.llm._bridge import ResponseDedup
@@ -888,6 +939,52 @@ def test_dedup_clear():
     lru.check_and_add(("t", "a"))
     lru.clear()
     assert lru.check_and_add(("t", "a")) is False
+
+
+def test_dedup_is_lock_protected():
+    # Item A: check_and_add/clear/discard must all take the same lock so a
+    # concurrent eviction between the membership check and move_to_end can
+    # never raise KeyError (which export_spans' catch-all would otherwise
+    # turn into a silently dropped span).
+    lru = ResponseDedup()
+    assert isinstance(lru._lock, type(threading.Lock()))
+
+
+def test_dedup_discard_allows_key_reuse():
+    lru = ResponseDedup()
+    lru.check_and_add(("t", "a"))
+    lru.discard(("t", "a"))
+    assert lru.check_and_add(("t", "a")) is False  # discarded -> not seen
+
+
+def test_dedup_discard_missing_key_is_noop():
+    lru = ResponseDedup()
+    lru.discard(("t", "missing"))  # must not raise
+    assert lru.check_and_add(("t", "missing")) is False
+
+
+def test_dedup_key_rolled_back_when_event_emission_raises():
+    # Item B: honeybadger.event() raising must not permanently consume the
+    # dedup slot -- otherwise the twin span (arriving later) is wrongly
+    # suppressed and the whole call is lost.
+    configured()
+    o = dedup_owner()
+    span_a = chat_span(**{"gen_ai.response.id": "chatcmpl-1"})
+    span_b = chat_span(**{"gen_ai.response.id": "chatcmpl-1"})
+    calls = []
+
+    def flaky_event(event_type, data):
+        calls.append(data)
+        if len(calls) == 1:
+            raise RuntimeError("boom")
+
+    with patch.object(honeybadger, "event", side_effect=flaky_event):
+        export_spans([span_a, span_b], o)
+
+    # First call raised (swallowed by export_spans' catch-all); the second
+    # twin must still be emitted -- not silently suppressed by a dedup key
+    # left over from the failed first attempt.
+    assert len(calls) == 2
 
 
 def test_export_works_without_dedup_attribute():
@@ -1088,6 +1185,72 @@ def test_instrument_options_passed_through(monkeypatch):
         "tracer_provider": "fake-provider",
         "disable_openai_trace_export": True,
     }
+
+
+def test_foreign_framework_instrumentor_omits_attribution(monkeypatch):
+    """A pre-instrumented (foreign-owned) langchain instrumentor is skipped
+    (existing behavior); we still activate openai_agents. Because langchain
+    spans could still reach our exporter on a borrowed provider, `framework`
+    must be omitted rather than mislabeled 'openai_agents' -- spec: never
+    guess wrong in preference to being omitted."""
+
+    class FakeLangChainInstrumentor:
+        is_instrumented_by_opentelemetry = True
+
+        def instrument(self, **kwargs):
+            raise AssertionError(
+                "must not instrument an already-foreign-owned instrumentor"
+            )
+
+        def uninstrument(self):
+            pass
+
+    class FakeAgentsInstrumentor:
+        is_instrumented_by_opentelemetry = False
+
+        def instrument(self, **kwargs):
+            pass
+
+        def uninstrument(self):
+            pass
+
+    fake_langchain_module = SimpleNamespace(
+        FakeLangChainInstrumentor=FakeLangChainInstrumentor
+    )
+    fake_agents_module = SimpleNamespace(FakeAgentsInstrumentor=FakeAgentsInstrumentor)
+
+    monkeypatch.setitem(
+        llm_module._INSTRUMENTORS,
+        "langchain",
+        (
+            "langchain_core",
+            "fake.langchain",
+            "FakeLangChainInstrumentor",
+            "langchain-core",
+        ),
+    )
+    monkeypatch.setitem(
+        llm_module._INSTRUMENTORS,
+        "openai_agents",
+        ("agents", "fake.agents", "FakeAgentsInstrumentor", "openai-agents"),
+    )
+
+    import importlib
+    import importlib.metadata
+
+    modules = {
+        "fake.langchain": fake_langchain_module,
+        "fake.agents": fake_agents_module,
+    }
+    monkeypatch.setattr(importlib, "import_module", lambda name: modules[name])
+    monkeypatch.setattr(importlib.metadata, "version", lambda dist: "0.1.0")
+
+    instance = LLMHoneybadger(instruments=["langchain", "openai_agents"])
+    activated = llm_module._activate_instrumentors(instance, provider="fake-provider")
+
+    assert activated == ["openai_agents"]
+    assert instance._foreign_framework_detected is True
+    assert instance.active_frameworks == ()
 
 
 def test_genai_singleton_cleared_only_if_we_created_it():

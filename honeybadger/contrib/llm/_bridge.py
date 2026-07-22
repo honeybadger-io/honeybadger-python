@@ -7,6 +7,7 @@ and import opentelemetry lazily inside the function bodies.
 """
 
 import logging
+import threading
 from collections import OrderedDict
 from typing import Set
 
@@ -43,28 +44,42 @@ class ResponseDedup:
     on the default BatchSpanProcessor path (one background export thread).
     Under SimpleSpanProcessor (the Lambda path in _attach_pipeline), export
     runs synchronously on each calling thread, so concurrent handlers can
-    call check_and_add() concurrently. NOT explicitly locked -- relies on
-    dict/OrderedDict operations being individually atomic under the GIL, so
-    a race can at worst let two concurrent calls both see "not seen" and
-    both emit (a duplicate event), never corrupt the structure itself."""
+    call check_and_add()/discard() concurrently. Explicitly locked with a
+    threading.Lock: check_and_add() is a multi-step sequence (membership
+    check -> move_to_end -> insert -> possible eviction) and without the
+    lock a race between the membership check and move_to_end could let
+    another thread's eviction remove the key first, raising KeyError (and
+    dropping the span via export_spans' catch-all). With the lock, worst
+    case under any interleaving is a duplicate event, never a dropped one
+    and never a corrupted structure."""
 
     def __init__(self, maxsize=512):
         self.maxsize = maxsize
         self._seen = OrderedDict()
+        self._lock = threading.Lock()
 
     def check_and_add(self, key):
         """True when key was already emitted (caller drops the event);
         records the key otherwise."""
-        if key in self._seen:
-            self._seen.move_to_end(key)
-            return True
-        self._seen[key] = True
-        if len(self._seen) > self.maxsize:
-            self._seen.popitem(last=False)
-        return False
+        with self._lock:
+            if key in self._seen:
+                self._seen.move_to_end(key)
+                return True
+            self._seen[key] = True
+            if len(self._seen) > self.maxsize:
+                self._seen.popitem(last=False)
+            return False
+
+    def discard(self, key):
+        """Remove key if present; no-op otherwise. Used to roll back a
+        check_and_add() insert when the caller failed to actually emit the
+        event it was reserving the key for."""
+        with self._lock:
+            self._seen.pop(key, None)
 
     def clear(self):
-        self._seen.clear()
+        with self._lock:
+            self._seen.clear()
 
 
 def snapshot_context_attributes(span):
@@ -106,13 +121,15 @@ def _export_one(span, owner):
     # provider instrumentor's for the same model call. Runs AFTER exclusion
     # (an excluded event must never suppress its twin), BEFORE emit.
     dedup = getattr(owner, "_dedup", None)
+    dedup_key = None
     if (
         dedup is not None
         and normalized.event_type in _DEDUPED_EVENT_TYPES
         and data.get("provider_response_id")
         and data.get("trace_id")
     ):
-        if dedup.check_and_add((data["trace_id"], data["provider_response_id"])):
+        dedup_key = (data["trace_id"], data["provider_response_id"])
+        if dedup.check_and_add(dedup_key):
             return
 
     if llm_config.include_prompts and normalized.prompts is not None:
@@ -150,7 +167,15 @@ def _export_one(span, owner):
     if data.get("trace_id"):
         data["_hb"] = {"sampling_key": data["trace_id"]}
 
-    honeybadger.event(normalized.event_type, data)
+    try:
+        honeybadger.event(normalized.event_type, data)
+    except Exception:
+        # The dedup key was recorded before this call (above) so the twin
+        # span, if it arrives later, isn't wrongly suppressed for an event
+        # that was never actually emitted. export_spans() catches and warns.
+        if dedup is not None and dedup_key is not None:
+            dedup.discard(dedup_key)
+        raise
 
 
 def _excluded(model, exclude_models):
@@ -233,6 +258,8 @@ def scrub_attributes(attributes, llm_config, params_filters):
     if _excluded(attributes.get("gen_ai.request.model"), llm_config.exclude_models):
         return None
 
+    is_workflow = attributes.get("gen_ai.operation.name") == "invoke_workflow"
+
     result = {}
     for key, value in attributes.items():
         flag = _CONTENT_ATTRS.get(key)
@@ -241,7 +268,15 @@ def scrub_attributes(attributes, llm_config, params_filters):
             continue
         if not getattr(llm_config, flag):
             continue  # drop content attribute entirely
-        if key in _OPAQUE_ATTRS:
+        # Workflow spans reuse the message-shaped attr names
+        # (gen_ai.input.messages/gen_ai.output.messages) for arbitrary
+        # workflow input/output, not a chat message list -- spec §5 requires
+        # tool AND workflow content to go through the opaque policy, not the
+        # message-shaped policy chat spans use.
+        if key in _OPAQUE_ATTRS or (
+            is_workflow
+            and key in ("gen_ai.input.messages", "gen_ai.output.messages")
+        ):
             result[key] = _scrub_opaque_attr(
                 value, params_filters, llm_config.max_content_length
             )
