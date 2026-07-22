@@ -94,7 +94,9 @@ def _size(data: dict) -> int:
 
 
 def enforce_event_budget(data: dict, max_event_bytes: int) -> dict:
-    """Hard-cap content against max_event_bytes. Order: drop prompt messages
+    """Hard-cap content against max_event_bytes. Order: drop opaque framework
+    content first (arguments → result → input → output in that fixed order,
+    stopping as soon as the event fits) → then drop prompt messages
     oldest-first (keeping one leading system message) until the event fits;
     if still over, drop the remaining prompts entirely (including the
     preserved system message); if still over, drop the response entirely.
