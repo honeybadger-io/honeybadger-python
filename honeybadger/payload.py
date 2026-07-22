@@ -21,7 +21,25 @@ MAX_CAUSE_DEPTH = 15
 
 def error_payload(exception, exc_traceback, config, fingerprint=None, tags=None):
     def _filename(name):
-        return name.replace(config.project_root, "[PROJECT_ROOT]")
+        root = config.project_root
+        if not root:
+            return name
+        # On Windows, fold the alternate separator ("/") onto os.sep ("\\")
+        # so a root and filename using different styles still match.
+        if os.altsep:
+            root = root.replace(os.altsep, os.sep)
+            compare_name = name.replace(os.altsep, os.sep)
+        else:
+            compare_name = name
+        normalized_root = root.rstrip(os.sep)
+        # Guard against a root that is empty after stripping (e.g. "/")
+        if not normalized_root:
+            return name
+        if compare_name == normalized_root:
+            return "[PROJECT_ROOT]"
+        if compare_name.startswith(normalized_root + os.sep):
+            return "[PROJECT_ROOT]" + compare_name[len(normalized_root) :]
+        return name
 
     def is_not_honeybadger_frame(frame):
         # TODO: is there a better way to do this?

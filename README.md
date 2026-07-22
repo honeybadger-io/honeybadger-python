@@ -260,6 +260,43 @@ app.conf.update(
 CeleryHoneybadger(app, report_exceptions=True)
 ```
 
+### Oban
+
+Honeybadger integrates with [Oban](https://github.com/oban-bg/oban-py) to report unhandled worker exceptions and emit per-job telemetry to Honeybadger Insights.
+
+Requires Python 3.12+ and `oban>=0.6.2`.
+
+```python
+from oban import Oban
+from honeybadger import honeybadger
+from honeybadger.contrib.oban import ObanHoneybadger
+
+honeybadger.configure(api_key="...", insights_enabled=True)
+ObanHoneybadger(report_exceptions=True).init()
+
+async with Oban(pool=pool, queues={"default": 10}) as oban:
+    ...
+```
+
+`report_exceptions=True` installs an `executor.wrap_result` extension that calls `honeybadger.notify` whenever a worker raises. When `insights_enabled=True`, the integration also emits `oban.job_finished` events (and `oban.<loop>_exception` events for maintenance-loop failures).
+
+Configuration:
+
+```python
+honeybadger.configure(insights_config={
+    "oban": {
+        "exclude_workers": ["myapp.NoisyWorker"],
+        "include_args": True,  # include job.args / job.meta in Insights events (default: False)
+    }
+})
+```
+
+`exclude_workers` filters Insights events only — error reporting is unaffected.
+
+Honeybadger event context set before enqueueing a job is automatically propagated through `job.meta` so the Insights timeline can link the enqueuing request to the worker's execution.
+
+Only one `ObanHoneybadger` instance may be active per process. Call `tearDown()` to fully reverse all wiring (useful in tests or for application shutdown hooks).
+
 ### Other frameworks / plain Python app
 
 Django and Flask are the only explicitly supported frameworks at the moment. For other frameworks (tornado, web2py, etc.) or a plain Python script, simply import honeybadger and configure it with your API key. Honeybadger uses a global exception hook to automatically report any uncaught exceptions.
@@ -296,6 +333,7 @@ automatically instrument the following libraries:
 - Flask requests & database queries
 - ASGI requests
 - Celery tasks
+- Oban workers & maintenance loops
 
 ### Configuration
 
@@ -370,6 +408,27 @@ The following instrumentation configs are available:
         }
     )
 ```
+
+#### Oban
+
+Configure per-integration options for Oban. All fields are optional.
+
+```python
+    honeybadger.configure(
+        insights_config={
+            "oban": {
+                # Disable instrumentation for Oban, defaults to False
+                "disabled": False,
+                # Exact strings or compiled regex patterns to exclude, defaults to []
+                "exclude_workers": ["myapp.NoisyWorker"],
+                # Include job.args / job.meta in Insights events, defaults to False
+                "include_args": False,
+            }
+        }
+    )
+```
+
+`exclude_workers` patterns match against the worker's fully-qualified class name. String patterns are exact-match; compiled regex patterns use `.search()`. `exclude_workers` filters Insights events only — error reporting is unaffected.
 
 #### DB
 

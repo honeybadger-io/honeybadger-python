@@ -78,7 +78,7 @@ def _attach_pipeline(self, provider):
         SimpleSpanProcessor,
     )
 
-    provider.add_span_processor(_bridge.make_context_processor())
+    provider.add_span_processor(_bridge.make_context_processor(self))
     exporter = self._build_exporter()
     # Lambda: batch thread may be frozen between invocations; go synchronous.
     if honeybadger.config.is_aws_lambda_environment:

@@ -113,6 +113,18 @@ def get_duration(start_time):
     return round((time.monotonic() - start_time) * 1000, 4)
 
 
+def matches_any_pattern(name, patterns):
+    """Whether name matches any of patterns: compiled regexes are matched via
+    .search(), anything else by equality. Used for exclude lists that accept
+    both exact strings and re.Pattern objects."""
+    if not patterns:
+        return False
+    return any(
+        pattern.search(name) if hasattr(pattern, "search") else pattern == name
+        for pattern in patterns
+    )
+
+
 def sanitize_request_id(request_id):
     """Sanitize a Request ID by keeping only alphanumeric characters and hyphens."""
     if not request_id:

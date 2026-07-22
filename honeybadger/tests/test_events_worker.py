@@ -317,3 +317,89 @@ def test_send_remaining_on_shutdown(base_config):
         w.push(e)
     w.shutdown()
     assert conn.batches[-1] == [{"id": 1}, {"id": 2}]
+
+
+def test_shutdown_returns_promptly_after_drain(base_config):
+    """Once shutdown() drains the queue, the worker must exit immediately —
+    not block in another wait(events_timeout) before noticing it's done."""
+    cfg = SimpleNamespace(**vars(base_config))
+    cfg.events_batch_size = 100
+    cfg.events_timeout = 1.0
+    conn = DummyConnection()
+    w = EventsWorker(connection=conn, config=cfg)
+    for e in ({"id": 1}, {"id": 2}):
+        w.push(e)
+
+    start = time.monotonic()
+    w.shutdown()
+    elapsed = time.monotonic() - start
+
+    assert conn.batches[-1] == [{"id": 1}, {"id": 2}]
+    assert not w._thread.is_alive()
+    assert elapsed < 0.5, f"shutdown took {elapsed:.2f}s after events were drained"
+
+
+def test_shutdown_interrupts_error_backoff(base_config):
+    """shutdown() must wake the worker out of its error backoff and only
+    report stopped once the thread has actually exited — not return while
+    the worker is still sleeping."""
+    cfg = SimpleNamespace(**vars(base_config))
+    cfg.events_timeout = "not-a-number"  # worker loop errors -> backoff path
+    conn = DummyConnection()
+    w = EventsWorker(connection=conn, config=cfg)
+    time.sleep(0.05)  # let the worker enter its error backoff
+    cfg.events_timeout = 0.1  # sane join timeout for shutdown
+
+    start = time.monotonic()
+    w.shutdown()
+    elapsed = time.monotonic() - start
+
+    assert not w._thread.is_alive(), "shutdown returned with worker still alive"
+    assert elapsed < 0.5, f"shutdown blocked {elapsed:.2f}s on error backoff"
+
+
+def test_shutdown_with_still_invalid_timeout_config(base_config):
+    """shutdown() must not crash computing its join timeout when the config
+    is still invalid at shutdown time."""
+    cfg = SimpleNamespace(**vars(base_config))
+    cfg.events_timeout = "not-a-number"
+    conn = DummyConnection()
+    w = EventsWorker(connection=conn, config=cfg)
+    time.sleep(0.05)  # let the worker enter its error backoff
+    w.shutdown()  # must not raise
+    assert not w._thread.is_alive()
+
+
+def test_shutdown_with_both_timing_configs_invalid(base_config):
+    """With both timing values non-numeric, max(str, str) * 2 is a string —
+    the join timeout must be coerced to a number before calling join()."""
+    cfg = SimpleNamespace(**vars(base_config))
+    cfg.events_timeout = "not-a-number"
+    cfg.events_throttle_wait = "also-bad"
+    conn = DummyConnection()
+    w = EventsWorker(connection=conn, config=cfg)
+    time.sleep(0.05)  # let the worker enter its error backoff
+    w.shutdown()  # must not raise
+    assert not w._thread.is_alive()
+
+
+def test_worker_survives_bad_timeout_config(base_config):
+    """A misconfigured (non-numeric) timeout must not kill the worker thread:
+    events pushed after the error must still be delivered once the config is
+    corrected."""
+    cfg = SimpleNamespace(**vars(base_config))
+    cfg.events_timeout = "not-a-number"  # e.g. an untypecast env var
+    conn = DummyConnection()
+    w = EventsWorker(connection=conn, config=cfg)
+    try:
+        time.sleep(0.1)  # give the loop a chance to hit the bad timeout
+        assert w._thread.is_alive(), "worker thread died on bad timeout config"
+
+        cfg.events_timeout = 0.1  # operator fixes the config
+        for e in ({"id": 1}, {"id": 2}, {"id": 3}):  # batch size reached
+            w.push(e)
+        assert wait_for(lambda: len(conn.batches) >= 1, timeout=3.0)
+        assert conn.batches[0] == [{"id": 1}, {"id": 2}, {"id": 3}]
+    finally:
+        cfg.events_timeout = 0.1
+        w.shutdown()
