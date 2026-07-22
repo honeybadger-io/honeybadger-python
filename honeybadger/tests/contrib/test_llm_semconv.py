@@ -227,3 +227,152 @@ def test_span_ids_survive_broken_context():
     result = normalize(NoContextSpan(attributes={"gen_ai.operation.name": "chat"}))
     assert "span_id" not in result.data
     assert "trace_id" not in result.data
+
+
+# --- framework span classification + normalizers ---
+
+
+def test_classification_table():
+    cases = {
+        "chat": "llm.chat",
+        "embeddings": "llm.embedding",
+        "invoke_workflow": "llm.workflow",
+        "invoke_agent": "llm.agent",
+        "execute_tool": "llm.tool_call",
+        "something_new": "llm.call",  # fallthrough unchanged
+    }
+    for operation, expected in cases.items():
+        span = FakeSpan(attributes={"gen_ai.operation.name": operation})
+        assert normalize(span).event_type == expected, operation
+
+
+def test_workflow_name_from_attribute():
+    span = FakeSpan(
+        attributes={
+            "gen_ai.operation.name": "invoke_workflow",
+            "gen_ai.workflow.name": "weather-workflow",
+        },
+        name="invoke_workflow weather-workflow",
+    )
+    result = normalize(span)
+    assert result.event_type == "llm.workflow"
+    assert result.data["workflow_name"] == "weather-workflow"
+
+
+def test_workflow_name_parsed_from_span_name_fallback():
+    # LangChain at 1.0b0 puts the name only in the span name.
+    span = FakeSpan(
+        attributes={"gen_ai.operation.name": "invoke_workflow"},
+        name="invoke_workflow LangGraph",
+    )
+    assert normalize(span).data["workflow_name"] == "LangGraph"
+
+
+def test_workflow_name_omitted_when_bare_span_name():
+    span = FakeSpan(
+        attributes={"gen_ai.operation.name": "invoke_workflow"},
+        name="invoke_workflow",
+    )
+    assert "workflow_name" not in normalize(span).data
+
+
+def test_workflow_content_carries_raw_input_output():
+    raw_in = json.dumps([{"role": "user", "parts": [{"type": "text", "content": "q"}]}])
+    raw_out = json.dumps(
+        [{"role": "assistant", "parts": [{"type": "text", "content": "a"}]}]
+    )
+    span = FakeSpan(
+        attributes={
+            "gen_ai.operation.name": "invoke_workflow",
+            "gen_ai.input.messages": raw_in,
+            "gen_ai.output.messages": raw_out,
+        },
+        name="invoke_workflow G",
+    )
+    result = normalize(span)
+    assert result.content == {"input": raw_in, "output": raw_out}
+    assert result.prompts is None  # framework events never use prompts/response
+    assert result.response is None
+
+
+def test_agent_fields():
+    span = FakeSpan(
+        attributes={
+            "gen_ai.operation.name": "invoke_agent",
+            "gen_ai.agent.name": "WeatherAgent",
+            "gen_ai.agent.id": "agent-1",
+            "gen_ai.agent.description": "Answers weather questions",
+            "gen_ai.conversation.id": "thread-42",
+        },
+        name="invoke_agent WeatherAgent",
+    )
+    result = normalize(span)
+    assert result.event_type == "llm.agent"
+    assert result.data["agent_name"] == "WeatherAgent"
+    assert result.data["agent_id"] == "agent-1"
+    assert result.data["description"] == "Answers weather questions"
+    assert result.data["conversation_id"] == "thread-42"
+    assert result.content == {}
+
+
+def test_tool_fields_and_content():
+    span = FakeSpan(
+        attributes={
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "get_weather",
+            "gen_ai.tool.call.id": "call_abc123",
+            "gen_ai.tool.type": "function",
+            "gen_ai.tool.call.arguments": '{"city":"Paris"}',
+            "gen_ai.tool.call.result": "sunny in Paris",
+        },
+        name="execute_tool get_weather",
+    )
+    result = normalize(span)
+    assert result.event_type == "llm.tool_call"
+    assert result.data["tool_name"] == "get_weather"
+    assert result.data["tool_call_id"] == "call_abc123"
+    assert result.data["tool_type"] == "function"
+    assert result.content == {
+        "arguments": '{"city":"Paris"}',
+        "result": "sunny in Paris",
+    }
+
+
+def test_framework_events_skip_provider_scalar_fields():
+    # An agent span carrying model/usage attrs (util-genai supports them)
+    # must NOT map them: the llm.agent schema has no such fields.
+    span = FakeSpan(
+        attributes={
+            "gen_ai.operation.name": "invoke_agent",
+            "gen_ai.agent.name": "A",
+            "gen_ai.request.model": "gpt-4o",
+            "gen_ai.usage.input_tokens": 5,
+        }
+    )
+    data = normalize(span).data
+    assert "model" not in data
+    assert "input_tokens" not in data
+
+
+def test_framework_events_still_get_duration_error_and_tree_fields():
+    from honeybadger.tests.contrib.llm_helpers import FakeSpanContext
+
+    span = FakeSpan(
+        attributes={
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "t",
+            "error.type": "ValueError",
+        },
+        parent=FakeSpanContext(span_id=0xB),
+    )
+    data = normalize(span).data
+    assert data["duration"] == 1234
+    assert data["error"] == "ValueError"
+    assert data["trace_id"] == format(0x1F, "032x")
+    assert data["parent_span_id"] == format(0xB, "016x")
+    assert "ts" in data
+
+
+def test_chat_events_have_empty_content_dict():
+    span = FakeSpan(attributes={"gen_ai.operation.name": "chat"})
+    assert normalize(span).content == {}

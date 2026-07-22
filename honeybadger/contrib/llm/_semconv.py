@@ -8,7 +8,7 @@ No opentelemetry imports — operates on the ReadableSpan duck-type
 
 import datetime
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 ADAPTER_VERSION = "genai-1.0"
@@ -17,7 +17,12 @@ _OPERATION_EVENT_TYPES = {
     "chat": "llm.chat",
     "embeddings": "llm.embedding",
     "embedding": "llm.embedding",
+    "invoke_workflow": "llm.workflow",
+    "invoke_agent": "llm.agent",
+    "execute_tool": "llm.tool_call",
 }
+
+FRAMEWORK_EVENT_TYPES = frozenset({"llm.workflow", "llm.agent", "llm.tool_call"})
 
 # metadata attribute -> event field (direct copies)
 _SCALAR_FIELDS = {
@@ -32,6 +37,21 @@ _SCALAR_FIELDS = {
     "gen_ai.usage.cache_creation.input_tokens": "cache_creation_tokens",
     "gen_ai.request.temperature": "temperature",
     "gen_ai.response.id": "provider_response_id",
+    "gen_ai.conversation.id": "conversation_id",
+}
+
+# framework-event attribute -> event field (direct copies, per event type)
+_AGENT_FIELDS = {
+    "gen_ai.agent.name": "agent_name",
+    "gen_ai.agent.id": "agent_id",
+    "gen_ai.agent.description": "description",
+    "gen_ai.conversation.id": "conversation_id",
+}
+
+_TOOL_FIELDS = {
+    "gen_ai.tool.name": "tool_name",
+    "gen_ai.tool.call.id": "tool_call_id",
+    "gen_ai.tool.type": "tool_type",
     "gen_ai.conversation.id": "conversation_id",
 }
 
@@ -68,6 +88,7 @@ class NormalizedLLMSpan:
     data: Dict[str, Any]
     prompts: Optional[List[dict]]
     response: Optional[List[dict]]
+    content: Dict[str, Any] = field(default_factory=dict)
 
 
 def normalize(span) -> Optional[NormalizedLLMSpan]:
@@ -79,21 +100,62 @@ def normalize(span) -> Optional[NormalizedLLMSpan]:
     event_type = _OPERATION_EVENT_TYPES.get(operation, "llm.call")  # type: ignore[arg-type]
 
     data: Dict[str, Any] = {}
-    for attr, field_name in _SCALAR_FIELDS.items():
-        if attr in attributes and field_name not in data:
-            data[field_name] = attributes[attr]
+    content: Dict[str, Any] = {}
+    prompts: Optional[List[dict]] = None
+    response: Optional[List[dict]] = None
 
-    finish_reasons = attributes.get("gen_ai.response.finish_reasons")
-    if finish_reasons:
-        # Normally a sequence (tuple/list); guard against a bare string,
-        # which is itself iterable and would otherwise yield its first
-        # character instead of the whole reason (e.g. "s" from "stop").
-        data["finish_reason"] = (
-            finish_reasons
-            if isinstance(finish_reasons, str)
-            else list(finish_reasons)[0]
+    if event_type == "llm.workflow":
+        workflow_name = attributes.get("gen_ai.workflow.name") or _parse_span_name(
+            span, "invoke_workflow"
         )
+        if workflow_name:
+            data["workflow_name"] = workflow_name
+        if "gen_ai.conversation.id" in attributes:
+            data["conversation_id"] = attributes["gen_ai.conversation.id"]
+        for attr, key in (
+            ("gen_ai.input.messages", "input"),
+            ("gen_ai.output.messages", "output"),
+        ):
+            if attr in attributes:
+                content[key] = attributes[attr]
+    elif event_type == "llm.agent":
+        for attr, field_name in _AGENT_FIELDS.items():
+            if attr in attributes:
+                data[field_name] = attributes[attr]
+    elif event_type == "llm.tool_call":
+        for attr, field_name in _TOOL_FIELDS.items():
+            if attr in attributes:
+                data[field_name] = attributes[attr]
+        for attr, key in (
+            ("gen_ai.tool.call.arguments", "arguments"),
+            ("gen_ai.tool.call.result", "result"),
+        ):
+            if attr in attributes:
+                content[key] = attributes[attr]
+    else:
+        # chat / embedding / llm.call: unchanged phase-1/2 extraction
+        for attr, field_name in _SCALAR_FIELDS.items():
+            if attr in attributes and field_name not in data:
+                data[field_name] = attributes[attr]
+        finish_reasons = attributes.get("gen_ai.response.finish_reasons")
+        if finish_reasons:
+            # Normally a sequence (tuple/list); guard against a bare string,
+            # which is itself iterable and would otherwise yield its first
+            # character instead of the whole reason (e.g. "s" from "stop").
+            data["finish_reason"] = (
+                finish_reasons
+                if isinstance(finish_reasons, str)
+                else list(finish_reasons)[0]
+            )
+        prompts = _decode_messages(attributes.get("gen_ai.input.messages"))
+        system = _decode_system_instructions(
+            attributes.get("gen_ai.system_instructions")
+        )
+        if system:
+            prompts = [{"role": "system", "content": system}] + (prompts or [])
+        response = _decode_messages(attributes.get("gen_ai.output.messages"))
 
+    # shared tail: duration/trace/span ids/ts/error (all events)
     duration = _duration_ms(span)
     if duration is not None:
         data["duration"] = duration
@@ -116,15 +178,21 @@ def normalize(span) -> Optional[NormalizedLLMSpan]:
     if error:
         data["error"] = error
 
-    prompts = _decode_messages(attributes.get("gen_ai.input.messages"))
-    system = _decode_system_instructions(attributes.get("gen_ai.system_instructions"))
-    if system:
-        prompts = [{"role": "system", "content": system}] + (prompts or [])
-    response = _decode_messages(attributes.get("gen_ai.output.messages"))
-
     return NormalizedLLMSpan(
-        event_type=event_type, data=data, prompts=prompts, response=response
+        event_type=event_type,
+        data=data,
+        prompts=prompts,
+        response=response,
+        content=content,
     )
+
+
+def _parse_span_name(span, operation) -> Optional[str]:
+    name = getattr(span, "name", None) or ""
+    prefix = operation + " "
+    if name.startswith(prefix):
+        return name[len(prefix):] or None
+    return None
 
 
 def _duration_ms(span) -> Optional[int]:
