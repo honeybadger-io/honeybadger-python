@@ -194,6 +194,21 @@ def test_teardown_flushes_buffered_spans_for_borrowed_provider(monkeypatch):
     our_worker_thread = instance._processor._batch_processor._worker_thread
     assert our_worker_thread.is_alive()
 
+    # While active, our context processor snapshots honeybadger event
+    # context onto every span the borrowed provider starts (observed via
+    # the app's own recorder). This is the positive half of the inertness
+    # check after tearDown() below.
+    honeybadger.set_event_context(request_id="req-live")
+    try:
+        with tracer_span_on(provider):
+            pass
+    finally:
+        honeybadger.reset_event_context()
+    assert (
+        other_recorder.spans[-1].attributes["honeybadger.context.request_id"]
+        == "req-live"
+    )
+
     client = openai_client(lambda request: httpx.Response(200, json=CHAT_RESPONSE))
     with shutdown_mock as mock_shutdown:
         with patch.object(honeybadger, "event") as mock_event:
@@ -236,6 +251,24 @@ def test_teardown_flushes_buffered_spans_for_borrowed_provider(monkeypatch):
                 span.set_attribute("gen_ai.request.model", "gpt-4o")
             provider.force_flush()
         assert not mock_event_after.called
+
+        # Context-processor inertness: our context SpanProcessor is also
+        # still physically attached, but after tearDown() it must stop
+        # injecting honeybadger.context.* attributes into the app's
+        # unrelated spans (they'd leak request/user identifiers to the
+        # app's other exporters).
+        honeybadger.set_event_context(request_id="req-after-teardown")
+        try:
+            with tracer_span_on(provider):
+                pass
+        finally:
+            honeybadger.reset_event_context()
+        leaked = [
+            key
+            for key in (other_recorder.spans[-1].attributes or {})
+            if key.startswith("honeybadger.context.")
+        ]
+        assert leaked == []
 
     provider.shutdown()
 
@@ -477,9 +510,7 @@ def test_env_gating_value_enables_real_content_capture(monkeypatch):
     instance.init()
     try:
         assert os.environ[CONTENT_ENV_VAR] == "span_only"
-        client = openai_client(
-            lambda request: httpx.Response(200, json=CHAT_RESPONSE)
-        )
+        client = openai_client(lambda request: httpx.Response(200, json=CHAT_RESPONSE))
         with patch.object(honeybadger, "event") as mock_event:
             client.chat.completions.create(
                 model="gpt-4o",

@@ -3,7 +3,12 @@ import logging
 
 from honeybadger import honeybadger
 from honeybadger.plugins import Plugin, default_plugin_manager
-from honeybadger.utils import filter_dict, extract_honeybadger_config, get_duration
+from honeybadger.utils import (
+    filter_dict,
+    extract_honeybadger_config,
+    get_duration,
+    matches_any_pattern,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -150,15 +155,10 @@ class CeleryHoneybadger(object):
 
         insights_config = honeybadger.config.insights_config
 
+        # Short-circuit before touching task.name: postrun handlers can receive
+        # partial task objects (e.g. plain dicts in tests) when no excludes are set.
         exclude = insights_config.celery.exclude_tasks
-        should_exclude = exclude and any(
-            (
-                pattern.search(task.name)
-                if hasattr(pattern, "search")
-                else pattern == task.name
-            )
-            for pattern in exclude
-        )
+        should_exclude = bool(exclude) and matches_any_pattern(task.name, exclude)
 
         if (
             honeybadger.config.insights_enabled

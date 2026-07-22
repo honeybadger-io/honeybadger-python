@@ -198,11 +198,18 @@ def _warn_once(failure_class, exc):
         logger.debug("honeybadger llm bridge %s failure: %s", failure_class, exc)
 
 
-def make_context_processor():
+def make_context_processor(owner):
     from opentelemetry.sdk.trace import SpanProcessor  # type: ignore[import-not-found]
 
     class HoneybadgerContextSpanProcessor(SpanProcessor):
         def on_start(self, span, parent_context=None):
+            # Gate on owner.active (like the exporters): on a borrowed
+            # provider this processor stays attached forever (otel has no
+            # remove_span_processor API), so after tearDown() it must go
+            # inert instead of injecting honeybadger.context.* attributes
+            # into the app's unrelated spans.
+            if not getattr(owner, "active", False):
+                return
             snapshot_context_attributes(span)
 
     return HoneybadgerContextSpanProcessor()

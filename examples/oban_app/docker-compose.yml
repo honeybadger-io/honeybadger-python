@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: oban-demo-postgres
+    environment:
+      POSTGRES_USER: oban
+      POSTGRES_PASSWORD: oban
+      POSTGRES_DB: oban_demo
+    ports:
+      - "5439:5432"
+    volumes:
+      # postgres:18+ keeps PGDATA in a versioned subdirectory; mount the parent
+      # (mounting /var/lib/postgresql/data makes the container refuse to start).
+      - oban-demo-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oban -d oban_demo"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+volumes:
+  oban-demo-pgdata:
