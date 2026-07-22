@@ -439,9 +439,14 @@ def test_auto_init_thread_safety(monkeypatch):
 
 
 def test_registry_contains_phase2_providers():
-    assert set(llm_module._INSTRUMENTORS) == {"openai", "anthropic", "bedrock"}
-    for key, (sdk_mod, inst_mod, inst_cls) in llm_module._INSTRUMENTORS.items():
+    assert {"openai", "anthropic", "bedrock"} <= set(llm_module._INSTRUMENTORS)
+    for key in llm_module._INSTRUMENTORS:
+        sdk_mod, inst_mod, inst_cls, dist_name = llm_module._registry_entry(key)
         assert isinstance(sdk_mod, str) and isinstance(inst_mod, str) and isinstance(inst_cls, str)
+        assert dist_name is None or isinstance(dist_name, str)
+    for key in ("openai", "anthropic", "bedrock"):
+        _sdk, _mod, _cls, dist_name = llm_module._registry_entry(key)
+        assert dist_name is None
 
 
 def test_bedrock_is_never_auto_detected():
@@ -993,3 +998,107 @@ def test_sampling_key_omitted_without_trace_id():
             [NoContextSpan(attributes={"gen_ai.operation.name": "chat"})], owner()
         )
     assert "_hb" not in mock_event.call_args[0][1]
+
+
+# --- phase 3: registry, detection, instrument_options, singleton lifecycle ---
+
+
+def test_registry_contains_phase3_frameworks():
+    assert llm_module._INSTRUMENTORS["langchain"] == (
+        "langchain_core",
+        "opentelemetry.instrumentation.genai.langchain",
+        "LangChainInstrumentor",
+        "langchain-core",
+    )
+    assert llm_module._INSTRUMENTORS["openai_agents"] == (
+        "agents",
+        "opentelemetry.instrumentation.genai.openai_agents",
+        "OpenAIAgentsInstrumentor",
+        "openai-agents",
+    )
+
+
+def test_frameworks_are_auto_detected_but_bedrock_still_is_not():
+    instance = LLMHoneybadger()
+    requested = instance._requested_instruments()
+    assert "langchain" in requested
+    assert "openai_agents" in requested
+    assert "bedrock" not in requested
+
+
+def test_dist_based_detection_skips_wrong_agents_package(monkeypatch):
+    """openai_agents activation must check the openai-agents DISTRIBUTION,
+    not find_spec("agents") -- any unrelated package could claim that name."""
+    import importlib.metadata
+
+    calls = []
+
+    def fake_version(dist):
+        calls.append(dist)
+        raise importlib.metadata.PackageNotFoundError(dist)
+
+    monkeypatch.setattr(importlib.metadata, "version", fake_version)
+    instance = LLMHoneybadger(instruments=["openai_agents"])
+    activated = llm_module._activate_instrumentors(instance, provider=None)
+    assert activated == []
+    assert "openai-agents" in calls
+
+
+def test_instrument_options_passed_through(monkeypatch):
+    recorded = {}
+
+    class FakeInstrumentor:
+        is_instrumented_by_opentelemetry = False
+
+        def instrument(self, **kwargs):
+            recorded.update(kwargs)
+
+        def uninstrument(self):
+            pass
+
+    fake_module = SimpleNamespace(FakeInstrumentor=FakeInstrumentor)
+    monkeypatch.setitem(
+        llm_module._INSTRUMENTORS,
+        "openai_agents",
+        ("agents", "fake.module", "FakeInstrumentor", "openai-agents"),
+    )
+    import importlib
+    import importlib.metadata
+
+    monkeypatch.setattr(importlib, "import_module", lambda name: fake_module)
+    monkeypatch.setattr(importlib.metadata, "version", lambda dist: "0.18.3")
+
+    instance = LLMHoneybadger(
+        instruments=["openai_agents"],
+        instrument_options={"openai_agents": {"disable_openai_trace_export": True}},
+    )
+    llm_module._activate_instrumentors(instance, provider="fake-provider")
+    assert recorded == {
+        "tracer_provider": "fake-provider",
+        "disable_openai_trace_export": True,
+    }
+
+
+def test_genai_singleton_cleared_only_if_we_created_it():
+    from opentelemetry.util.genai import handler as genai_handler
+
+    get = genai_handler.get_telemetry_handler
+    # Case 1: no pre-existing singleton; we created one -> cleared.
+    if hasattr(get, "_default_handler"):
+        delattr(get, "_default_handler")
+    instance = LLMHoneybadger()
+    instance._saw_genai_singleton = False
+    instance._activated_framework = True
+    get._default_handler = object()  # simulate framework instrument() creating it
+    llm_module._release_genai_singleton(instance)
+    assert not hasattr(get, "_default_handler")
+
+    # Case 2: pre-existing singleton -> left alone.
+    sentinel = object()
+    get._default_handler = sentinel
+    instance2 = LLMHoneybadger()
+    instance2._saw_genai_singleton = True
+    instance2._activated_framework = True
+    llm_module._release_genai_singleton(instance2)
+    assert get._default_handler is sentinel
+    delattr(get, "_default_handler")
