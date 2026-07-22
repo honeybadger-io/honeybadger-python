@@ -632,6 +632,51 @@ def test_scrub_keeps_and_redacts_tool_definitions_when_opted_in():
     assert decoded[0]["name"] == "get_weather"
 
 
+def test_scrub_drops_tool_content_attrs_by_default():
+    configured()
+    llm_config = honeybadger.config.insights_config.llm
+    attrs = {
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.tool.name": "get_weather",
+        "gen_ai.tool.call.arguments": '{"city":"Paris"}',
+        "gen_ai.tool.call.result": "sunny",
+    }
+    result = _bridge.scrub_attributes(attrs, llm_config, [])
+    assert "gen_ai.tool.call.arguments" not in result
+    assert "gen_ai.tool.call.result" not in result
+    assert result["gen_ai.tool.name"] == "get_weather"
+
+
+def test_scrub_keeps_and_redacts_tool_arguments_when_opted_in():
+    configured(include_prompts=True, include_responses=True)
+    llm_config = honeybadger.config.insights_config.llm
+    attrs = {
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.tool.call.arguments": json.dumps(
+            {"city": "Paris", "password": "hunter2"}
+        ),
+        "gen_ai.tool.call.result": "sunny in Paris",
+    }
+    result = _bridge.scrub_attributes(attrs, llm_config, ["password"])
+    decoded = json.loads(result["gen_ai.tool.call.arguments"])
+    assert decoded["city"] == "Paris"
+    assert decoded["password"] == "[FILTERED]"
+    # plain-string result passes through the opaque policy as a string
+    assert result["gen_ai.tool.call.result"] == "sunny in Paris"
+
+
+def test_scrub_truncates_plain_string_tool_result():
+    configured(include_prompts=True, include_responses=True, max_content_length=5)
+    llm_config = honeybadger.config.insights_config.llm
+    attrs = {
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.tool.call.result": "sunny in Paris",
+    }
+    result = _bridge.scrub_attributes(attrs, llm_config, [])
+    assert result["gen_ai.tool.call.result"].startswith("sunny")
+    assert "TRUNCATED" in result["gen_ai.tool.call.result"]
+
+
 def test_scrub_flattens_nested_parts_and_truncates():
     from honeybadger.contrib.llm._policy import TRUNCATION_MARKER
 

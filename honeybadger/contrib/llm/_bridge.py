@@ -202,7 +202,15 @@ _CONTENT_ATTRS = {
     "gen_ai.system_instructions": "include_prompts",
     "gen_ai.tool.definitions": "include_prompts",
     "gen_ai.output.messages": "include_responses",
+    "gen_ai.tool.call.arguments": "include_prompts",
+    "gen_ai.tool.call.result": "include_responses",
 }
+
+# Attrs that hold any-typed opaque content (plain string or JSON), not
+# message lists -- scrubbed with the opaque policy, not the message policy.
+_OPAQUE_ATTRS = frozenset(
+    {"gen_ai.tool.call.arguments", "gen_ai.tool.call.result"}
+)
 
 
 def scrub_attributes(attributes, llm_config, params_filters):
@@ -227,9 +235,14 @@ def scrub_attributes(attributes, llm_config, params_filters):
             continue
         if not getattr(llm_config, flag):
             continue  # drop content attribute entirely
-        result[key] = _scrub_content_attr(
-            value, params_filters, llm_config.max_content_length
-        )
+        if key in _OPAQUE_ATTRS:
+            result[key] = _scrub_opaque_attr(
+                value, params_filters, llm_config.max_content_length
+            )
+        else:
+            result[key] = _scrub_content_attr(
+                value, params_filters, llm_config.max_content_length
+            )
     return result
 
 
@@ -262,6 +275,17 @@ def _normalize_content_entry(entry):
     entry = dict(entry)
     entry["content"] = _flatten_parts(entry.pop("parts"))
     return entry
+
+
+def _scrub_opaque_attr(raw, params_filters, max_content_length):
+    import json as _json
+
+    from ._policy import apply_opaque_content_policy
+
+    policied = apply_opaque_content_policy(raw, params_filters, max_content_length)
+    if isinstance(policied, str):
+        return policied  # keep plain strings as plain attribute values
+    return _json.dumps(policied, ensure_ascii=False, default=repr)
 
 
 def make_otlp_exporter(owner, wrapped=None):
