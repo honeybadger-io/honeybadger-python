@@ -30,4 +30,4 @@ celery-types
 
 # For Python 3.10+ which removed cgi module
 legacy-cgi==2.6.4
-oban==0.6.2; python_version >= "3.12"
+oban==0.6.4; python_version >= "3.12"
