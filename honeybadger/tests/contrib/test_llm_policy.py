@@ -166,6 +166,18 @@ def test_opaque_non_json_string_kept_as_string():
     assert apply_opaque_content_policy("{not json", [], 8192) == "{not json"
 
 
+def test_opaque_tuple_treated_as_list():
+    # OTel stores sequence-valued attrs as tuples. A top-level tuple must
+    # not bypass redaction/truncation the way a bare isinstance(value, list)
+    # check would miss it.
+    value = ({"api_key": "secret", "note": "x" * 50}, "y" * 50)
+    result = apply_opaque_content_policy(value, ["api_key"], 10)
+    assert isinstance(result, list)
+    assert result[0]["api_key"] == "[FILTERED]"
+    assert result[0]["note"] == "x" * 10 + TRUNCATION_MARKER
+    assert result[1] == "y" * 10 + TRUNCATION_MARKER
+
+
 # --- budget drop order extension ---
 
 

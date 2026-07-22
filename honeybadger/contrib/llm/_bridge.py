@@ -39,8 +39,14 @@ _DEDUPED_EVENT_TYPES = ("llm.chat", "llm.embedding")
 class ResponseDedup:
     """Bounded LRU of (trace_id, provider_response_id) keys already emitted.
     Best-effort suppression of the double chat spans LangChain produces
-    (its own chat span wraps the provider instrumentor's). NOT thread-safe
-    beyond the GIL; only the export thread touches it."""
+    (its own chat span wraps the provider instrumentor's). Single-threaded
+    on the default BatchSpanProcessor path (one background export thread).
+    Under SimpleSpanProcessor (the Lambda path in _attach_pipeline), export
+    runs synchronously on each calling thread, so concurrent handlers can
+    call check_and_add() concurrently. NOT explicitly locked -- relies on
+    dict/OrderedDict operations being individually atomic under the GIL, so
+    a race can at worst let two concurrent calls both see "not seen" and
+    both emit (a duplicate event), never corrupt the structure itself."""
 
     def __init__(self, maxsize=512):
         self.maxsize = maxsize

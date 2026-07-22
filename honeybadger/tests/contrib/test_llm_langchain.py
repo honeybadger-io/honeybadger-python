@@ -175,12 +175,15 @@ def test_langgraph_run_emits_reconstructable_tree(llm):
     assert workflow["input"]
     assert workflow["output"]
 
-    # raw spans: exactly 6 (workflow + 2x2 chat + tool) with 2 duplicate pairs
+    # raw chat spans: exactly 4 (2 model calls x LangChain-wrap + provider
+    # twin each) vs. 2 emitted `llm.chat` events above -- proves dedup
+    # collapsed the twins in the exporter, not that the SDK emitted fewer
+    # raw spans to begin with.
     chat_spans = [
         s for s in llm.recorder.spans
         if (s.attributes or {}).get("gen_ai.operation.name") == "chat"
     ]
-    assert len(chat_spans) == 4  # dedup happened in the exporter, not the SDK
+    assert len(chat_spans) == 4
 
 
 def test_async_ainvoke_emits_same_tree(llm):

@@ -215,6 +215,13 @@ class LLMHoneybadger(object):
             raise ValueError(
                 "export must be one of %r, got %r" % (_EXPORT_MODES, export)
             )
+        unknown = set(instrument_options or {}) - set(_INSTRUMENTORS)
+        if unknown:
+            # A typo'd/unknown key (e.g. "openai-agents" instead of
+            # "openai_agents") would otherwise be silently ignored -- a
+            # privacy foot-gun, since instrument_options is how callers
+            # disable things like the Agents SDK's native trace export.
+            raise ValueError("unknown instrument_options keys: %s" % sorted(unknown))
         self.instruments = instruments
         self.export = export
         self.instrument_options = instrument_options

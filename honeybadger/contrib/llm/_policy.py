@@ -69,6 +69,12 @@ def apply_opaque_content_policy(value, filter_keys: list, max_content_length: in
             value = json.loads(value)
         except (ValueError, TypeError):
             pass  # plain string content: truncate below
+    if isinstance(value, tuple):
+        # OTel stores sequence-valued attrs as tuples; without this a
+        # top-level tuple would skip both filter_structure() (redaction)
+        # and the isinstance(value, list) check in _truncate_string_leaves,
+        # bypassing the policy entirely.
+        value = list(value)
     if isinstance(value, (dict, list)):
         value = filter_structure(value, filter_keys)
     return _truncate_string_leaves(value, max_content_length)

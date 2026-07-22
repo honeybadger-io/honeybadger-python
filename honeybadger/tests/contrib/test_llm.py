@@ -464,6 +464,17 @@ def test_unknown_instrument_raises():
     assert "watson" in str(excinfo.value)
 
 
+def test_unknown_instrument_options_key_raises():
+    # A dash instead of an underscore ("openai-agents") must not be
+    # silently ignored -- that would leave the Agents SDK's native OpenAI
+    # trace export on despite the caller believing they'd disabled it.
+    with pytest.raises(ValueError) as excinfo:
+        LLMHoneybadger(
+            instrument_options={"openai-agents": {"disable_openai_trace_export": True}}
+        )
+    assert "openai-agents" in str(excinfo.value)
+
+
 def test_otel_available_is_registry_driven(monkeypatch):
     import importlib.util as ilu
     real_find_spec = ilu.find_spec
