@@ -37,6 +37,11 @@ setup(
         "llm": [
             'opentelemetry-sdk>=1.43,<2; python_version >= "3.10"',
             'opentelemetry-instrumentation-genai-openai>=1.0b0,<1.1; python_version >= "3.10"',
+            'opentelemetry-instrumentation-genai-anthropic>=1.0b0,<1.1; python_version >= "3.10"',
+            # ==0.64b0 REQUIRED: 0.65b0 pins opentelemetry-instrumentation==0.65b0
+            # AND opentelemetry-semantic-conventions==0.65b0, both conflicting with
+            # the genai family's ~=0.64b0
+            'opentelemetry-instrumentation-botocore==0.64b0; python_version >= "3.10"',
         ],
     },
 )

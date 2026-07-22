@@ -3,6 +3,7 @@ HTTP transport, into a patched honeybadger.event. Skipped when the [llm]
 extra isn't installed (Python < 3.10 rows)."""
 
 import json
+import os
 from unittest.mock import patch
 
 import pytest
@@ -484,6 +485,44 @@ def test_exception_mid_stream_consumption_still_emits(llm):
     # field), an exception propagating out of the consumer loop is recorded:
     # confirmed empirically, see contrib/llm.md attribute matrix notes.
     assert data.get("error") == "ValueError"
+
+
+def test_env_gating_value_enables_real_content_capture(monkeypatch):
+    """Production gating path: CONTENT_ENV_VAR is left UNSET (never hand-set
+    here, unlike the `llm` fixture) so _apply_env_gating() must write it
+    itself from include_prompts=True. Then drive a real OpenAI instrumentor
+    call and assert the prompt text actually reaches the emitted event.
+
+    This proves the exact value _apply_env_gating() writes ("span_only") is
+    honored by the real instrumentor -- not just parsed by our own fake-otel
+    unit tests. See opentelemetry/util/genai/utils.py:20-28
+    get_content_capturing_mode(), which upper-cases the env value before an
+    enum lookup, so "span_only" and "SPAN_ONLY" are equivalent for both the
+    openai and anthropic instrumentors (they share this parse site via
+    opentelemetry.util.genai.handler.TelemetryHandler)."""
+    monkeypatch.delenv(CONTENT_ENV_VAR, raising=False)
+    honeybadger.configure(
+        api_key="fake",
+        insights_enabled=True,
+        insights_config={"llm": {"include_prompts": True}},
+    )
+    instance = LLMHoneybadger(instruments=["openai"])
+    instance.init()
+    try:
+        assert os.environ[CONTENT_ENV_VAR] == "span_only"
+        client = openai_client(lambda request: httpx.Response(200, json=CHAT_RESPONSE))
+        with patch.object(honeybadger, "event") as mock_event:
+            client.chat.completions.create(
+                model="gpt-4o",
+                messages=[{"role": "user", "content": "hi"}],
+            )
+            flush(instance)
+        assert mock_event.called
+        data = mock_event.call_args[0][1]
+        assert "prompts" in data
+        assert any(m.get("content") == "hi" for m in data["prompts"])
+    finally:
+        instance.tearDown()
 
 
 def test_async_client_chat_completion_end_to_end(llm):
