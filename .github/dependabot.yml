@@ -1,12 +1,18 @@
 version: 2
 updates:
 - package-ecosystem: pip
-  directory: "/"
+  directories:
+  - "/"
+  - "/examples/*"
   schedule:
     interval: daily
     time: "09:00"
     timezone: America/Los_Angeles
-  open-pull-requests-limit: 99
+  open-pull-requests-limit: 10
+  groups:
+    python-dependencies:
+      patterns:
+      - "*"
 - package-ecosystem: "github-actions"
   directory: "/"
   schedule:
