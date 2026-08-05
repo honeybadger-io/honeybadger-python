@@ -24,7 +24,21 @@ _INSTRUMENTORS = {
         "opentelemetry.instrumentation.genai.openai",
         "OpenAIInstrumentor",
     ),
+    "anthropic": (
+        "anthropic",
+        "opentelemetry.instrumentation.genai.anthropic",
+        "AnthropicInstrumentor",
+    ),
+    # BotocoreInstrumentor traces EVERY botocore call (S3, DynamoDB, ...),
+    # so bedrock is explicit-only: never part of auto-detection.
+    "bedrock": (
+        "botocore",
+        "opentelemetry.instrumentation.botocore",
+        "BotocoreInstrumentor",
+    ),
 }
+
+_EXPLICIT_ONLY = frozenset({"bedrock"})
 
 _active_instance = None
 _auto_instance = None
@@ -32,13 +46,16 @@ _lock = threading.Lock()
 _auto_lock = threading.Lock()
 
 
-def _otel_available():
+def _otel_available(requested=None):
     try:
-        return (
-            importlib.util.find_spec("opentelemetry.sdk") is not None
-            and importlib.util.find_spec("opentelemetry.instrumentation.genai.openai")
-            is not None
-        )
+        if importlib.util.find_spec("opentelemetry.sdk") is None:
+            return False
+        keys = requested if requested is not None else list(_INSTRUMENTORS)
+        for key in keys:
+            _sdk, module_name, _cls = _INSTRUMENTORS[key]
+            if importlib.util.find_spec(module_name) is not None:
+                return True
+        return False
     except ModuleNotFoundError:
         # find_spec("opentelemetry.sdk") raises (rather than returning None)
         # when the parent "opentelemetry" package is entirely absent -- the
@@ -129,7 +146,7 @@ class LLMHoneybadger(object):
             if unknown:
                 raise ValueError("unknown instruments: %s" % sorted(unknown))
             return list(self.instruments)
-        return list(_INSTRUMENTORS)
+        return [k for k in _INSTRUMENTORS if k not in _EXPLICIT_ONLY]
 
     def init(self):
         global _active_instance
@@ -147,7 +164,8 @@ class LLMHoneybadger(object):
                 )
             _active_instance = self
         try:
-            if not _otel_available():
+            requested = self._requested_instruments()
+            if not _otel_available(requested):
                 raise ImportError(
                     "LLM instrumentation requires the [llm] extra on Python >= 3.10: "
                     "pip install 'honeybadger[llm]'"
@@ -195,6 +213,15 @@ class LLMHoneybadger(object):
             return
         llm_config = honeybadger.config.insights_config.llm
         if llm_config.include_prompts or llm_config.include_responses:
+            # Verified against installed opentelemetry-util-genai source:
+            # get_content_capturing_mode() (opentelemetry/util/genai/utils.py)
+            # does `envvar.strip().upper()` before an Enum[] lookup on
+            # ContentCapturingMode, so this is case-insensitive. Both the
+            # openai and anthropic instrumentors route through that same
+            # function via opentelemetry.util.genai.handler.TelemetryHandler,
+            # so lowercase "span_only" enables span-content capture for both
+            # -- no per-provider casing divergence despite docs showing
+            # different cases (see .superpowers/sdd/task-2-report.md).
             os.environ[CONTENT_ENV_VAR] = "span_only"
             self._env_was_set_by_us = True
 
