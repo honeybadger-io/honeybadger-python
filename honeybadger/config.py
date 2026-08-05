@@ -75,6 +75,16 @@ class ObanConfig:
 
 
 @dataclass
+class LLMConfig:
+    disabled: bool = False
+    include_prompts: bool = False
+    include_responses: bool = False
+    max_content_length: int = 8192  # per content string, chars
+    max_event_bytes: int = 65536  # serialized event budget, UTF-8 bytes
+    exclude_models: List[Union[str, Pattern]] = field(default_factory=list)
+
+
+@dataclass
 class InsightsConfig:
     db: DBConfig = field(default_factory=DBConfig)
     django: DjangoConfig = field(default_factory=DjangoConfig)
@@ -82,6 +92,7 @@ class InsightsConfig:
     celery: CeleryConfig = field(default_factory=CeleryConfig)
     asgi: ASGIConfig = field(default_factory=ASGIConfig)
     oban: ObanConfig = field(default_factory=ObanConfig)
+    llm: LLMConfig = field(default_factory=LLMConfig)
 
 
 @dataclass

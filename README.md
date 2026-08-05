@@ -462,6 +462,59 @@ database events.
     )
 ```
 
+## LLM Monitoring (beta)
+
+Honeybadger can automatically log your OpenAI calls — model, token usage,
+duration, and errors — as Insights events. Prompts and responses are **off
+by default** and can be enabled with one flag:
+
+```python
+# pip install 'honeybadger[llm]'  (Python 3.10+)
+from honeybadger import honeybadger
+
+honeybadger.configure(
+    api_key="{{PROJECT_API_KEY}}",
+    insights_enabled=True,
+    insights_config={
+        "llm": {
+            "include_prompts": True,   # opt-in: logs prompt content
+            "include_responses": True, # opt-in: logs response content
+        }
+    },
+)
+```
+
+Django, Flask, and ASGI integrations activate LLM instrumentation
+automatically when the extra is installed **and** `insights_enabled=True` is
+set in `honeybadger.configure(...)` — auto-init is skipped entirely
+otherwise. Elsewhere, initialize explicitly:
+
+```python
+from honeybadger.contrib.llm import LLMHoneybadger
+
+LLMHoneybadger().init()
+```
+
+If you configure your own `LLMHoneybadger` instance (e.g. `export="otlp"`
+or a custom `tracer_provider=`), call `.init()` **before** the framework
+integration sets itself up — e.g. in your Django settings module or
+`wsgi.py`, not `AppConfig.ready()` (too late) — since the framework's
+auto-init otherwise claims the single active instance first and your
+explicit `.init()` will raise `RuntimeError`.
+
+Configuration options (under `insights_config["llm"]`): `disabled`,
+`include_prompts`, `include_responses`, `max_content_length` (default 8192
+chars per content string), `max_event_bytes` (default 65536), and
+`exclude_models` (exact strings or compiled regexes). Prompt/response
+content is filtered with `params_filters` and truncated before it leaves
+your process.
+
+Notes: streaming OpenAI calls report token usage only when you pass
+`stream_options={"include_usage": True}`; embedding inputs are never
+captured. Advanced: `LLMHoneybadger(export="otlp")` sends standard
+OTel-shaped spans to Honeybadger's OpenTelemetry endpoint instead of
+`llm.*` events (requires `opentelemetry-exporter-otlp-proto-http`).
+
 ## Logging
 
 By default, Honeybadger uses the `logging.NullHandler` for logging so it doesn't make any assumptions about your logging setup. In Django, add a `honeybadger` section to your `LOGGING` config to enable Honeybadger logging. For example:

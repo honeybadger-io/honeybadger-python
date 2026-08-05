@@ -98,6 +98,11 @@ class ASGIHoneybadger(plugins.Plugin):
         if kwargs:
             honeybadger.configure(**kwargs)
 
+        if honeybadger.config.insights_enabled:
+            from honeybadger.contrib.llm import auto_init
+
+            auto_init()
+
         self.app = app
 
         if _looks_like_asgi3(app):

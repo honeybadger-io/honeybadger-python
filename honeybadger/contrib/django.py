@@ -139,6 +139,9 @@ class DjangoHoneybadgerMiddleware(object):
         default_plugin_manager.register(DjangoPlugin())
         if honeybadger.config.insights_enabled:
             self._patch_cursor()
+            from honeybadger.contrib.llm import auto_init
+
+            auto_init()
 
     def __call__(self, request):
         set_request(request)

@@ -455,3 +455,35 @@ class FlaskHoneybadgerInsightsTestCase(unittest.TestCase):
         request_id = mock_set_event_context.call_args[1]["request_id"]
         uuid_obj = uuid.UUID(request_id)
         assert isinstance(uuid_obj, uuid.UUID)
+
+
+class FlaskHoneybadgerAutoInitTestCase(unittest.TestCase):
+    @patch("honeybadger.contrib.llm.auto_init")
+    def test_auto_init_called_when_insights_enabled(self, mock_auto_init):
+        import flask
+
+        app = flask.Flask(__name__)
+        app.config.update(
+            {
+                "HONEYBADGER_INSIGHTS_ENABLED": True,
+                "HONEYBADGER_API_KEY": "test",
+                "HONEYBADGER_ENVIRONMENT": "test",
+            }
+        )
+        FlaskHoneybadger(app)
+        mock_auto_init.assert_called_once()
+
+    @patch("honeybadger.contrib.llm.auto_init")
+    def test_auto_init_not_called_when_insights_disabled(self, mock_auto_init):
+        import flask
+
+        app = flask.Flask(__name__)
+        app.config.update(
+            {
+                "HONEYBADGER_INSIGHTS_ENABLED": False,
+                "HONEYBADGER_API_KEY": "test",
+                "HONEYBADGER_ENVIRONMENT": "test",
+            }
+        )
+        FlaskHoneybadger(app)
+        mock_auto_init.assert_not_called()

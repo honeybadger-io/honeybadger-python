@@ -4,6 +4,7 @@ from unittest.mock import patch
 from honeybadger.utils import (
     filter_dict,
     filter_env_vars,
+    filter_structure,
     get_duration,
     sanitize_request_id,
 )
@@ -108,3 +109,35 @@ def test_sanitize_request_id():
     assert sanitize_request_id(None) is None
     assert sanitize_request_id("") is None
     assert sanitize_request_id("   ") is None
+
+
+def test_filter_structure_filters_keys_inside_lists():
+    data = {"messages": [{"role": "user", "password": "hunter2", "content": "hi"}]}
+    result = filter_structure(data, ["password"])
+    assert result["messages"][0]["password"] == "[FILTERED]"
+    assert result["messages"][0]["content"] == "hi"
+
+
+def test_filter_structure_does_not_mutate_input():
+    data = {"outer": [{"password": "hunter2"}]}
+    filter_structure(data, ["password"])
+    assert data["outer"][0]["password"] == "hunter2"
+
+
+def test_filter_structure_handles_nested_dicts_and_scalars():
+    data = {"a": {"password": "x", "b": [1, "two", {"password": "y"}]}}
+    result = filter_structure(data, ["password"])
+    assert result["a"]["password"] == "[FILTERED]"
+    assert result["a"]["b"][2]["password"] == "[FILTERED]"
+    assert result["a"]["b"][0] == 1
+
+
+def test_filter_structure_drops_tuple_keys():
+    data = {("a", "b"): 1, "keep": 2}
+    result = filter_structure(data, [])
+    assert result == {"keep": 2}
+
+
+def test_filter_structure_passes_through_non_containers():
+    assert filter_structure("plain", ["password"]) == "plain"
+    assert filter_structure(None, ["password"]) is None

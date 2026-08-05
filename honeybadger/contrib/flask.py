@@ -159,6 +159,10 @@ class FlaskHoneybadger(object):
                 self._handle_request_started,
             )
 
+            from honeybadger.contrib.llm import auto_init
+
+            auto_init()
+
         if self.reset_context_after_request:
             self._register_signal_handler(
                 "auto clear context on request end",

@@ -71,6 +71,29 @@ def filter_dict(data, filter_keys, remove_keys=False):
     return data
 
 
+def filter_structure(data, filter_keys):
+    """Recursively filter dicts — including dicts inside lists/tuples —
+    replacing values of matching keys with "[FILTERED]".
+
+    Unlike filter_dict, this is a pure function: it returns a new
+    structure and never mutates the input. Tuple keys are dropped
+    (not JSON-serializable).
+    """
+    if isinstance(data, dict):
+        result = {}
+        for key, value in data.items():
+            if isinstance(key, tuple):
+                continue
+            if key in filter_keys:
+                result[key] = "[FILTERED]"
+            else:
+                result[key] = filter_structure(value, filter_keys)
+        return result
+    if isinstance(data, (list, tuple)):
+        return [filter_structure(item, filter_keys) for item in data]
+    return data
+
+
 PREFIX = "HONEYBADGER_"
 
 
