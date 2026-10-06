@@ -1,3 +1,4 @@
+import threading
 import time
 from types import SimpleNamespace
 import pytest
@@ -347,15 +348,28 @@ def test_shutdown_interrupts_error_backoff(base_config):
     cfg.events_timeout = "not-a-number"  # worker loop errors -> backoff path
     conn = DummyConnection()
     w = EventsWorker(connection=conn, config=cfg)
-    time.sleep(0.05)  # let the worker enter its error backoff
-    cfg.events_timeout = 0.1  # sane join timeout for shutdown
 
-    start = time.monotonic()
+    # Signal when the worker is inside its backoff, and record whether the
+    # backoff was woken (True) or ran out (False). The backoff is stretched
+    # so a slow runner can't let it time out before shutdown() is called.
+    in_backoff = threading.Event()
+    woken = []
+    real_wait = w._stop_event.wait
+
+    def backoff_wait(timeout=None):
+        in_backoff.set()
+        result = real_wait(30.0)
+        woken.append(result)
+        return result
+
+    w._stop_event.wait = backoff_wait
+    assert in_backoff.wait(5.0), "worker never entered its error backoff"
+    cfg.events_timeout = 1.0  # sane join timeout for shutdown
+
     w.shutdown()
-    elapsed = time.monotonic() - start
 
     assert not w._thread.is_alive(), "shutdown returned with worker still alive"
-    assert elapsed < 0.5, f"shutdown blocked {elapsed:.2f}s on error backoff"
+    assert woken == [True], "shutdown did not wake the worker from its backoff"
 
 
 def test_shutdown_with_still_invalid_timeout_config(base_config):
