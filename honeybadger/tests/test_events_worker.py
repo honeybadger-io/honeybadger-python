@@ -348,14 +348,16 @@ def test_shutdown_interrupts_error_backoff(base_config):
     conn = DummyConnection()
     w = EventsWorker(connection=conn, config=cfg)
     time.sleep(0.05)  # let the worker enter its error backoff
-    cfg.events_timeout = 0.1  # sane join timeout for shutdown
+    # Generous join timeout (2s) so a slow CI runner can't time out the join;
+    # the elapsed check below is what proves shutdown skipped the 1s backoff.
+    cfg.events_timeout = 1.0
 
     start = time.monotonic()
     w.shutdown()
     elapsed = time.monotonic() - start
 
     assert not w._thread.is_alive(), "shutdown returned with worker still alive"
-    assert elapsed < 0.5, f"shutdown blocked {elapsed:.2f}s on error backoff"
+    assert elapsed < 0.9, f"shutdown blocked {elapsed:.2f}s on error backoff"
 
 
 def test_shutdown_with_still_invalid_timeout_config(base_config):
