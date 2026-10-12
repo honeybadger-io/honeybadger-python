@@ -1,6 +1,6 @@
 # Oban contrib — maintainer notes
 
-This document describes what `honeybadger/contrib/oban.py` does and the *why* behind its non-obvious choices. It's for someone maintaining or extending the contrib. End-user usage and configuration live in the project [README](../../README.md) under "Oban".
+This document describes what `honeybadger/contrib/oban.py` does and the *why* behind its non-obvious choices. It's for someone maintaining or extending the contrib. End-user usage and configuration live in the [Oban section of the docs](https://docs.honeybadger.io/lib/python/integrations/other/#oban).
 
 ## What the contrib does
 

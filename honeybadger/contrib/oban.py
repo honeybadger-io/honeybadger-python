@@ -3,7 +3,8 @@
 Reports unhandled worker exceptions to Honeybadger and emits per-job +
 maintenance-loop telemetry to Honeybadger Insights.
 
-End-user usage and configuration: see the Oban section in the project README.
+End-user usage and configuration:
+https://docs.honeybadger.io/lib/python/integrations/other/#oban
 Design and rationale (for maintainers): see oban.md alongside this file.
 """
 
